@@ -1,0 +1,9 @@
+{
+    "dock_position": "left",
+    "transparency": 39,
+    "dock_color": "#000000",
+    "dock_size": {
+        "width": 70,
+        "height": 250
+    }
+}
