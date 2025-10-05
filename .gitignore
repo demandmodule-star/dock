@@ -1,0 +1,26 @@
+# User configuration files
+settings.json
+buttons.json
+
+# Icon files
+icons/
+*.png
+*.ico
+*.jpg
+*.jpeg
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE settings
+.vscode/
+.idea/
