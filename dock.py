@@ -2,20 +2,39 @@
 Dynamic Dock Widget - A customizable, auto-hiding dock for desktop applications.
 
 This module provides a configurable dock widget that can be positioned on any screen edge.
-The dock supports custom buttons with icons that can launch applications or execute commands.
+The dock supports custom buttons with icons that can launch applications or execute commands,
+with a full GUI interface for customization and button management.
 
 Features:
 - Auto-hiding dock that slides in/out when mouse hovers
 - Configurable position (top, bottom, left, right)
-- Dynamic button loading from buttons.json
+- Advanced button management through GUI:
+    * Add, edit, and delete buttons
+    * Reorder buttons with up/down controls
+    * Icon file picker integration
+    * Live preview of changes
 - Support for custom icons and actions
 - Hover animations and tooltips
-- Persistent settings
-- Customizable appearance (transparency, color, size)
+- Persistent settings with tabbed interface
+- Customizable appearance:
+    * Transparency
+    * Color
+    * Corner radius
+    * Size
+    * Position
 
 Configuration:
     buttons.json - Defines dock buttons with their icons and actions
     settings.json - Stores dock position, size, and appearance settings
+
+Settings Dialog:
+    Customization Tab:
+        - Dock position, transparency, color
+        - Corner radius and size settings
+    Buttons Tab:
+        - Full CRUD operations for buttons
+        - Button reordering controls
+        - Visual icon picker
 
 Usage:
     python dock.py
@@ -35,9 +54,11 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QPushButton, QDialog, QVBoxLayout, QHBoxLayout,
     QComboBox, QSlider, QSpinBox, QColorDialog, QMessageBox, QLabel,
-    QToolButton, QSizePolicy
+    QToolButton, QSizePolicy, QTabWidget, QTableWidget, QTableWidgetItem,
+    QHeaderView, QFileDialog, QLineEdit
 )
 from PyQt6.QtCore import Qt, QTimer, QRect, QPropertyAnimation, QEasingCurve, QSize
+from PyQt6.QtCore import pyqtProperty as Property
 from PyQt6.QtGui import QPainter, QColor, QIcon, QFont
 
 # Dock position constants
@@ -62,7 +83,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.parent = parent
         self.setWindowTitle("Dock Settings")
-        self.setFixedSize(300, 250)
+        self.setFixedSize(800, 500)
         
         # Center the dialog on screen
         screen = QApplication.primaryScreen().geometry()
@@ -72,7 +93,25 @@ class SettingsDialog(QDialog):
         )
 
         layout = QVBoxLayout()
+        
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        self.setup_customization_tab()
+        self.setup_buttons_tab()
+        layout.addWidget(self.tab_widget)
+        
+        # Apply Button at bottom
+        apply_btn = QPushButton("Apply")
+        apply_btn.clicked.connect(self.apply_settings)
+        layout.addWidget(apply_btn)
+        
+        self.setLayout(layout)
 
+    def setup_customization_tab(self):
+        """Setup the customization tab with appearance settings"""
+        customization_tab = QWidget()
+        layout = QVBoxLayout()
+        
         # Dock Position
         pos_layout = QHBoxLayout()
         pos_label = QLabel("Dock Position:")
@@ -92,6 +131,16 @@ class SettingsDialog(QDialog):
         trans_layout.addWidget(trans_label)
         trans_layout.addWidget(self.trans_slider)
         layout.addLayout(trans_layout)
+
+        # Corner Radius
+        radius_layout = QHBoxLayout()
+        radius_label = QLabel("Corner Radius:")
+        self.radius_spin = QSpinBox()
+        self.radius_spin.setRange(0, 50)
+        self.radius_spin.setValue(getattr(self.parent, 'corner_radius', 16))
+        radius_layout.addWidget(radius_label)
+        radius_layout.addWidget(self.radius_spin)
+        layout.addLayout(radius_layout)
 
         # Color Picker
         color_layout = QHBoxLayout()
@@ -119,13 +168,9 @@ class SettingsDialog(QDialog):
         size_layout.addWidget(QLabel("H:"))
         size_layout.addWidget(self.height_spin)
         layout.addLayout(size_layout)
-
-        # Apply Button
-        apply_btn = QPushButton("Apply")
-        apply_btn.clicked.connect(self.apply_settings)
-        layout.addWidget(apply_btn)
-
-        self.setLayout(layout)
+        
+        customization_tab.setLayout(layout)
+        self.tab_widget.addTab(customization_tab, "Customization")
 
     def update_color_button(self, color):
         self.color_button.setStyleSheet(f"background-color: {color};")
@@ -144,17 +189,301 @@ class SettingsDialog(QDialog):
                 self.parent.dock_color = color.name()
                 self.update_color_button(color.name())
 
+    def setup_buttons_tab(self):
+        """Setup the buttons tab with CRUD operations"""
+        buttons_tab = QWidget()
+        layout = QVBoxLayout()
+        
+        # Buttons table
+        self.buttons_table = QTableWidget()
+        self.buttons_table.setColumnCount(4)
+        self.buttons_table.setHorizontalHeaderLabels(["Name", "Icon", "Action", "Controls"])
+        # Set specific column widths
+        self.buttons_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)  # Name
+        self.buttons_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)  # Icon
+        self.buttons_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)      # Action
+        self.buttons_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)        # Controls
+        
+        # Set initial column widths
+        self.buttons_table.setColumnWidth(0, 150)  # Name
+        self.buttons_table.setColumnWidth(1, 200)  # Icon
+        self.buttons_table.setColumnWidth(3, 170)  # Controls
+        self.buttons_table.verticalHeader().setDefaultSectionSize(40)  # Set row height
+        
+        # Set selection behavior
+        self.buttons_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        
+        # Load current buttons
+        self.load_buttons_to_table()
+        
+        layout.addWidget(self.buttons_table)
+        
+        # Add New Button
+        add_btn = QPushButton("Add New Button")
+        add_btn.clicked.connect(self.add_new_button)
+        layout.addWidget(add_btn)
+        
+        buttons_tab.setLayout(layout)
+        self.tab_widget.addTab(buttons_tab, "Buttons")
+
+    def load_buttons_to_table(self):
+        """Load current buttons into the table"""
+        try:
+            with open(self.parent.buttons_file, 'r', encoding='utf-8-sig') as f:
+                config = json.load(f)
+                buttons = config.get('buttons', [])
+                
+                self.buttons_table.setRowCount(len(buttons))
+                for row, button in enumerate(buttons):
+                    # Name
+                    name_item = QTableWidgetItem(button.get('name', ''))
+                    self.buttons_table.setItem(row, 0, name_item)
+                    
+                    # Icon
+                    icon_item = QTableWidgetItem(button.get('icon', ''))
+                    self.buttons_table.setItem(row, 1, icon_item)
+                    
+                    # Action
+                    action_item = QTableWidgetItem(button.get('action', ''))
+                    self.buttons_table.setItem(row, 2, action_item)
+                    
+                    # Controls
+                    controls = QWidget()
+                    controls_layout = QHBoxLayout()
+                    controls_layout.setContentsMargins(0, 0, 0, 0)
+                    controls_layout.setSpacing(2)
+                    
+                    # Move buttons
+                    move_up_btn = QPushButton("↑")
+                    move_up_btn.setFixedSize(25, 30)
+                    move_up_btn.clicked.connect(lambda checked, r=row: self.move_button_up(r))
+                    move_up_btn.setEnabled(row > 0)  # Disable for first row
+                    
+                    move_down_btn = QPushButton("↓")
+                    move_down_btn.setFixedSize(25, 30)
+                    move_down_btn.clicked.connect(lambda checked, r=row: self.move_button_down(r))
+                    move_down_btn.setEnabled(row < self.buttons_table.rowCount() - 1)  # Disable for last row
+                    
+                    # Edit and Delete buttons
+                    edit_btn = QPushButton("Edit")
+                    edit_btn.setFixedSize(50, 30)
+                    edit_btn.clicked.connect(lambda checked, r=row: self.edit_button(r))
+                    
+                    delete_btn = QPushButton("Delete")
+                    delete_btn.setFixedSize(50, 30)
+                    delete_btn.clicked.connect(lambda checked, r=row: self.delete_button(r))
+                    
+                    controls_layout.addWidget(move_up_btn)
+                    controls_layout.addWidget(move_down_btn)
+                    controls_layout.addWidget(edit_btn)
+                    controls_layout.addWidget(delete_btn)
+                    controls.setLayout(controls_layout)
+                    
+                    self.buttons_table.setCellWidget(row, 3, controls)
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to load buttons: {str(e)}")
+
+    def add_new_button(self):
+        """Add a new button row to the table"""
+        row = self.buttons_table.rowCount()
+        self.buttons_table.insertRow(row)
+        
+        # Add empty items
+        for col in range(3):
+            self.buttons_table.setItem(row, col, QTableWidgetItem(""))
+            
+        # Add controls
+        controls = QWidget()
+        controls_layout = QHBoxLayout()
+        
+        edit_btn = QPushButton("Edit")
+        edit_btn.clicked.connect(lambda checked, r=row: self.edit_button(r))
+        
+        delete_btn = QPushButton("Delete")
+        delete_btn.clicked.connect(lambda checked, r=row: self.delete_button(r))
+        
+        controls_layout.addWidget(edit_btn)
+        controls_layout.addWidget(delete_btn)
+        controls.setLayout(controls_layout)
+        
+        self.buttons_table.setCellWidget(row, 3, controls)
+
+    def edit_button(self, row):
+        """Edit button in the specified row using a dialog"""
+        edit_dialog = QDialog(self)
+        edit_dialog.setWindowTitle("Edit Button")
+        edit_dialog.setFixedSize(400, 200)
+        layout = QVBoxLayout()
+
+        # Name field
+        name_layout = QHBoxLayout()
+        name_label = QLabel("Name:")
+        name_edit = QLineEdit()
+        name_edit.setText(self.buttons_table.item(row, 0).text())
+        name_layout.addWidget(name_label)
+        name_layout.addWidget(name_edit)
+        layout.addLayout(name_layout)
+
+        # Icon field with file picker
+        icon_layout = QHBoxLayout()
+        icon_label = QLabel("Icon:")
+        icon_edit = QLineEdit()
+        icon_edit.setText(self.buttons_table.item(row, 1).text())
+        icon_browse = QPushButton("Browse")
+        icon_browse.clicked.connect(lambda: self.browse_icon(icon_edit))
+        icon_layout.addWidget(icon_label)
+        icon_layout.addWidget(icon_edit)
+        icon_layout.addWidget(icon_browse)
+        layout.addLayout(icon_layout)
+
+        # Action field
+        action_layout = QHBoxLayout()
+        action_label = QLabel("Action:")
+        action_edit = QLineEdit()
+        action_edit.setText(self.buttons_table.item(row, 2).text())
+        action_layout.addWidget(action_label)
+        action_layout.addWidget(action_edit)
+        layout.addLayout(action_layout)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+        save_btn = QPushButton("Save")
+        cancel_btn = QPushButton("Cancel")
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+
+        edit_dialog.setLayout(layout)
+
+        # Connect buttons
+        save_btn.clicked.connect(lambda: self.save_button_edit(
+            row, name_edit.text(), icon_edit.text(), action_edit.text(), edit_dialog
+        ))
+        cancel_btn.clicked.connect(edit_dialog.close)
+
+        # Show dialog
+        edit_dialog.exec()
+
+    def browse_icon(self, line_edit):
+        """Open file dialog for icon selection"""
+        icon_path, _ = QFileDialog.getOpenFileName(
+            self, "Select Icon", "", "Image Files (*.png *.jpg *.jpeg)"
+        )
+        if icon_path:
+            line_edit.setText(icon_path)
+
+    def save_button_edit(self, row, name, icon, action, dialog):
+        """Save the edited button values"""
+        self.buttons_table.item(row, 0).setText(name)
+        self.buttons_table.item(row, 1).setText(icon)
+        self.buttons_table.item(row, 2).setText(action)
+        dialog.close()
+
+    def get_row_data(self, row):
+        """Get all data from a row"""
+        return {
+            'name': self.buttons_table.item(row, 0).text(),
+            'icon': self.buttons_table.item(row, 1).text(),
+            'action': self.buttons_table.item(row, 2).text()
+        }
+
+    def set_row_data(self, row, data):
+        """Set all data for a row"""
+        self.buttons_table.item(row, 0).setText(data['name'])
+        self.buttons_table.item(row, 1).setText(data['icon'])
+        self.buttons_table.item(row, 2).setText(data['action'])
+
+    def move_button_up(self, row):
+        """Move button up one row"""
+        if row > 0:
+            # First get all button configurations
+            buttons = []
+            for i in range(self.buttons_table.rowCount()):
+                buttons.append(self.get_row_data(i))
+            
+            # Move the button up in the list
+            buttons.insert(row - 1, buttons.pop(row))
+            
+            # Save the new configuration
+            config = {'buttons': buttons}
+            with open(self.parent.buttons_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=4)
+            
+            # Reload the entire table to reflect changes
+            self.load_buttons_to_table()
+            
+            # Select the moved row
+            self.buttons_table.selectRow(row - 1)
+
+    def move_button_down(self, row):
+        """Move button down one row"""
+        if row < self.buttons_table.rowCount() - 1:
+            # First get all button configurations
+            buttons = []
+            for i in range(self.buttons_table.rowCount()):
+                buttons.append(self.get_row_data(i))
+            
+            # Move the button down in the list
+            buttons.insert(row + 1, buttons.pop(row))
+            
+            # Save the new configuration
+            config = {'buttons': buttons}
+            with open(self.parent.buttons_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=4)
+            
+            # Reload the entire table to reflect changes
+            self.load_buttons_to_table()
+            
+            # Select the moved row
+            self.buttons_table.selectRow(row + 1)
+
+    def delete_button(self, row):
+        """Delete button from the specified row"""
+        if QMessageBox.question(
+            self,
+            "Confirm Delete",
+            "Are you sure you want to delete this button?"
+        ) == QMessageBox.StandardButton.Yes:
+            self.buttons_table.removeRow(row)
+
+    def save_buttons(self):
+        """Save buttons configuration to file"""
+        buttons = []
+        for row in range(self.buttons_table.rowCount()):
+            button = {
+                'name': self.buttons_table.item(row, 0).text(),
+                'icon': self.buttons_table.item(row, 1).text(),
+                'action': self.buttons_table.item(row, 2).text()
+            }
+            buttons.append(button)
+            
+        config = {'buttons': buttons}
+        try:
+            with open(self.parent.buttons_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=4)
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to save buttons: {str(e)}")
+
     def apply_settings(self):
+        # Save buttons first
+        self.save_buttons()
+        
+        # Then save general settings
         new_settings = {
             "dock_position": self.pos_combo.currentText(),
             "transparency": self.trans_slider.value(),
             "dock_color": self.parent.dock_color,
+            "corner_radius": self.radius_spin.value(),
             "dock_size": {
                 "width": self.width_spin.value(),
                 "height": self.height_spin.value()
             }
         }
         self.parent.apply_settings(new_settings)
+        
+        # Reload dock buttons to reflect new order
+        self.parent.load_buttons()
+        
         self.close()
 
 class DockButton(QToolButton):
@@ -170,6 +499,7 @@ class DockButton(QToolButton):
     def __init__(self, config, parent=None):
         super().__init__(parent)
         self.config = config
+        self._iconSize = QSize(32, 32)  # Initial icon size
         self.setup_button()
         
     def setup_button(self):
@@ -197,7 +527,8 @@ class DockButton(QToolButton):
             self.setToolTipDuration(3000)  # Show tooltip for 3 seconds
             
         except Exception as e:
-            print(f"Error setting up button {self.config.get('name', 'unknown')}: {str(e)}")
+            QMessageBox.warning(None, "Button Setup Error", 
+                f"Error setting up button {self.config.get('name', 'unknown')}: {str(e)}")
             # Set fallback properties
             self.setToolTip("Error loading button")
             self.setText("•")
@@ -210,43 +541,45 @@ class DockButton(QToolButton):
             QToolButton {
                 background-color: transparent;
                 border: none;
-                border-radius: 24px;
                 padding: 8px;
             }
-            QToolButton:hover {
-                background-color: rgba(255, 255, 255, 50);
-            }
             QToolButton:pressed {
-                background-color: rgba(255, 255, 255, 30);
-            }
-            QToolButton::hover {
-                border: 1px solid rgba(255, 255, 255, 30);
+                background-color: transparent;
             }
         """)
         
-        # Setup hover animation
-        self.zoom_animation = QPropertyAnimation(self, b'size')
+        # Setup hover animation for icon size
+        self.zoom_animation = QPropertyAnimation(self, b'iconSize')
         self.zoom_animation.setDuration(150)
         self.zoom_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.setIconSize(self._iconSize)
         
     def enterEvent(self, event):
         super().enterEvent(event)
         # Stop any running animations
         self.zoom_animation.stop()
-        # Zoom in on hover
-        current_size = self.size()
-        self.zoom_animation.setStartValue(current_size)
-        self.zoom_animation.setEndValue(QSize(int(current_size.width() * 1.2), int(current_size.height() * 1.2)))
+        # Only zoom the icon, not the button
+        self.zoom_animation.setStartValue(self._iconSize)
+        self.zoom_animation.setEndValue(QSize(40, 40))  # Increase icon size to 40x40 on hover
         self.zoom_animation.start()
         
     def leaveEvent(self, event):
         super().leaveEvent(event)
         # Stop any running animations
         self.zoom_animation.stop()
-        # Zoom out when mouse leaves
-        self.zoom_animation.setStartValue(self.size())
-        self.zoom_animation.setEndValue(QSize(40, 40))
+        # Return icon to original size
+        self.zoom_animation.setStartValue(self._iconSize)
+        self.zoom_animation.setEndValue(QSize(32, 32))  # Return to default 32x32 size
         self.zoom_animation.start()
+        
+    def get_iconSize(self):
+        return self._iconSize
+        
+    def set_iconSize(self, size):
+        self._iconSize = size
+        super().setIconSize(size)
+        
+    iconSize = Property(QSize, get_iconSize, set_iconSize)
 
 class DockWindow(QWidget):
     """Main dock widget with auto-hide functionality and customizable appearance.
@@ -294,22 +627,15 @@ class DockWindow(QWidget):
         # Load and add dock buttons first
         self.load_buttons()
         
-        # Add settings button with center alignment
-        self.settings_btn = QPushButton("⚙", self)
-        self.settings_btn.setFixedSize(30, 30)
+        # Add settings button with the same style as other buttons
+        settings_config = {
+            'name': 'Settings',
+            'icon': '',  # No icon, using text
+        }
+        self.settings_btn = DockButton(settings_config, self)
+        self.settings_btn.setText("⚙")
+        self.settings_btn.setFont(QFont('Arial', 20))
         self.settings_btn.clicked.connect(self.show_settings)
-        self.settings_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: white;
-                border: none;
-                font-size: 20px;
-            }
-            QPushButton:hover {
-                background-color: rgba(255, 255, 255, 30);
-                border-radius: 15px;
-            }
-        """)
         self.main_layout.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignCenter)
     def load_settings(self):
         try:
@@ -326,18 +652,29 @@ class DockWindow(QWidget):
         self.edge = settings['dock_position']
         self.transparency = settings['transparency']
         self.dock_color = settings['dock_color']
+        self.corner_radius = settings.get('corner_radius', 16)  # Default to 16 if not set
         self.size = settings['dock_size']['width']
         self.dock_height = settings['dock_size']['height']
         self.offset = 10
 
     def get_default_settings(self):
+        """Get default settings for first-time initialization.
+        
+        Returns a dictionary containing default values for all dock settings:
+        - dock_position: Initial screen edge placement
+        - transparency: Default opacity (0-100)
+        - dock_color: Background color in hex format
+        - corner_radius: Rounded corner radius in pixels
+        - dock_size: Dictionary with width and height values
+        """
         return {
-            "dock_position": EDGE_LEFT,
-            "transparency": 60,
-            "dock_color": "#000000",
+            "dock_position": EDGE_LEFT,      # Start on left edge
+            "transparency": 60,              # 60% transparency
+            "dock_color": "#000000",         # Black background
+            "corner_radius": 16,             # Rounded corners
             "dock_size": {
-                "width": 50,
-                "height": 300
+                "width": 50,                 # Default button width
+                "height": 300                # Initial dock height
             }
         }
 
@@ -360,17 +697,36 @@ class DockWindow(QWidget):
         self.settings_dialog_open = False
         
     def create_default_buttons_file(self):
-        """Create a default buttons.json file with sample configurations."""
+        """Create a default buttons.json file with sample configurations.
+        
+        Creates a basic configuration file with common applications
+        that users might want to add to their dock.
+        """
         default_buttons = {
             "buttons": [
                 {
                     "name": "File Explorer",
                     "icon": "icons/folder.png",
                     "action": "explorer ."
+                },
+                {
+                    "name": "Command Prompt",
+                    "icon": "icons/terminal.png",
+                    "action": "cmd"
+                },
+                {
+                    "name": "Web Browser",
+                    "icon": "icons/chrome.png",
+                    "action": "https://www.google.com"
                 }
             ]
         }
         try:
+            # Ensure the icons directory exists
+            icons_dir = os.path.join(os.path.dirname(self.buttons_file), "icons")
+            os.makedirs(icons_dir, exist_ok=True)
+            
+            # Create the buttons configuration
             with open(self.buttons_file, 'w', encoding='utf-8') as f:
                 json.dump(default_buttons, f, indent=4)
         except Exception as e:
@@ -389,30 +745,43 @@ class DockWindow(QWidget):
             self.create_default_buttons_file()
         
         try:
+            # First remove all existing buttons and the settings button
+            for button in self.buttons:
+                self.main_layout.removeWidget(button)
+                button.deleteLater()
+            self.buttons.clear()
+            
+            if hasattr(self, 'settings_btn'):
+                self.main_layout.removeWidget(self.settings_btn)
+            
+            # Load and create regular buttons
             with open(self.buttons_file, 'r', encoding='utf-8-sig') as f:
-                config = json.load(f)                # Clear existing buttons
-                for button in self.buttons:
-                    self.main_layout.removeWidget(button)
-                    button.deleteLater()
-                self.buttons.clear()
-                
-                # Create new buttons
+                config = json.load(f)
                 for button_config in config.get('buttons', []):
                     button = DockButton(button_config, self)
                     button.clicked.connect(lambda checked, b=button_config: self.handle_button_click(b))
                     self.main_layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
                     self.buttons.append(button)
+            
+            # Always add settings button last
+            if hasattr(self, 'settings_btn'):
+                self.main_layout.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignCenter)
                     
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to load buttons: {str(e)}")
             
     def handle_button_click(self, button_config):
-        """Handle button clicks by executing the specified command."""
+        """Handle button clicks by executing the specified command or opening URLs."""
         try:
-            action = button_config.get('action')
+            action = button_config.get('action', '').strip()
             if action:
-                # Run the command in a non-blocking way
-                subprocess.Popen(action, shell=True)
+                # Check if the action is a URL
+                if action.startswith(('http://', 'https://', 'www.')):
+                    # Open URLs in default browser
+                    webbrowser.open(action)
+                else:
+                    # Run other commands in a non-blocking way
+                    subprocess.Popen(action, shell=True)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to execute action: {str(e)}")
 
@@ -486,7 +855,7 @@ class DockWindow(QWidget):
         color.setAlpha(int(255 * (1 - self.transparency / 100)))
         painter.setBrush(color)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(self.rect(), 16, 16)
+        painter.drawRoundedRect(self.rect(), self.corner_radius, self.corner_radius)
         painter.end()
 
     def place_dock(self):
