@@ -54,7 +54,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QPushButton, QDialog, QVBoxLayout, QHBoxLayout,
     QComboBox, QSlider, QSpinBox, QColorDialog, QMessageBox, QLabel,
-    QToolButton, QSizePolicy, QTabWidget, QTableWidget, QTableWidgetItem,
+    QToolButton, QSizePolicy, QTabWidget, QTableWidget, QTableWidgetItem, QButtonGroup,
     QHeaderView, QFileDialog, QLineEdit
 )
 from PyQt6.QtCore import Qt, QTimer, QRect, QPropertyAnimation, QEasingCurve, QSize
@@ -128,42 +128,70 @@ class SettingsDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20) # Add some padding
         layout.setSpacing(15) # Increase spacing between rows
         
+        # --- Basic Settings ---
+        basic_heading = QLabel("<b>Basic</b>")
+        font = basic_heading.font()
+        font.setPointSize(font.pointSize() + 2) # Increase font size
+        basic_heading.setFont(font)
+        basic_heading.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        layout.addRow(basic_heading)
+
         # Dock Position
-        self.pos_combo = QComboBox()
-        self.pos_combo.setFixedWidth(150) # Set a fixed width
-        self.pos_combo.addItems([EDGE_LEFT, EDGE_RIGHT, EDGE_TOP, EDGE_BOTTOM])
-        self.pos_combo.setCurrentText(self.parent.edge)
-        # Use a layout to prevent stretching
         pos_widget = QWidget()
         pos_layout = QHBoxLayout(pos_widget)
         pos_layout.setContentsMargins(0, 0, 0, 0)
-        pos_layout.addWidget(self.pos_combo, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.pos_button_group = QButtonGroup(self)
+        self.pos_button_group.setExclusive(True)
+
+        positions = {
+            EDGE_LEFT: "Left", EDGE_RIGHT: "Right",
+            EDGE_TOP: "Top", EDGE_BOTTOM: "Bottom"
+        }
+        for edge, text in positions.items():
+            btn = QPushButton(text)
+            btn.setCheckable(True)
+            btn.setFixedWidth(70)
+            if self.parent.edge == edge:
+                btn.setChecked(True)
+            self.pos_button_group.addButton(btn, id=list(positions.keys()).index(edge))
+            pos_layout.addWidget(btn)
+        
+        pos_layout.addStretch()
         layout.addRow("Dock Position:", pos_widget)
 
         # Transparency
         trans_widget = QWidget()
         trans_layout = QHBoxLayout(trans_widget)
         trans_layout.setContentsMargins(0, 0, 0, 0)
+        
         self.trans_slider = QSlider(Qt.Orientation.Horizontal)
+        self.trans_slider.setMaximumWidth(300) # Reduce slider width
         self.trans_slider.setRange(0, 100)
         self.trans_slider.setValue(self.parent.transparency)
+        
         self.trans_label = QLabel(f"{self.parent.transparency}%")
         self.trans_label.setFixedWidth(40) # Give it a fixed width
         self.trans_slider.valueChanged.connect(lambda value: self.trans_label.setText(f"{value}%"))
+        
         trans_layout.addWidget(self.trans_slider)
         trans_layout.addWidget(self.trans_label)
+        trans_layout.addStretch()
         layout.addRow("Transparency:", trans_widget)
 
         # Corner Radius
-        self.radius_spin = QSpinBox()
-        self.radius_spin.setFixedWidth(150) # Set a fixed width
-        self.radius_spin.setRange(0, 50)
-        self.radius_spin.setValue(getattr(self.parent, 'corner_radius', 16))
-        # Use a layout to prevent stretching
         radius_widget = QWidget()
         radius_layout = QHBoxLayout(radius_widget)
         radius_layout.setContentsMargins(0, 0, 0, 0)
-        radius_layout.addWidget(self.radius_spin, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.radius_slider = QSlider(Qt.Orientation.Horizontal)
+        self.radius_slider.setMaximumWidth(300)
+        self.radius_slider.setRange(0, 50)
+        self.radius_slider.setValue(getattr(self.parent, 'corner_radius', 16))
+        self.radius_label = QLabel(f"{self.radius_slider.value()}")
+        self.radius_label.setFixedWidth(40)
+        self.radius_slider.valueChanged.connect(lambda value: self.radius_label.setText(f"{value}"))
+        radius_layout.addWidget(self.radius_slider)
+        radius_layout.addWidget(self.radius_label)
+        radius_layout.addStretch()
         layout.addRow("Corner Radius:", radius_widget)
 
         # Color Picker
@@ -178,6 +206,29 @@ class SettingsDialog(QDialog):
         color_layout.setContentsMargins(0, 0, 0, 0)
         color_layout.addWidget(self.color_button, alignment=Qt.AlignmentFlag.AlignLeft)
         layout.addRow("Dock Color:", color_widget)
+
+        # --- Advanced Settings ---
+        advanced_heading = QLabel("<b>Advanced</b>")
+        advanced_heading.setFont(font) # Use the same larger font
+        advanced_heading.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        advanced_heading.setContentsMargins(0, 10, 0, 0) # Add 10px space above the heading
+        layout.addRow(advanced_heading)
+
+        # Icon Size
+        icon_size_widget = QWidget()
+        icon_size_layout = QHBoxLayout(icon_size_widget)
+        icon_size_layout.setContentsMargins(0, 0, 0, 0)
+        self.icon_size_slider = QSlider(Qt.Orientation.Horizontal)
+        self.icon_size_slider.setMaximumWidth(300)
+        self.icon_size_slider.setRange(16, 64) # e.g., 16px to 64px
+        self.icon_size_slider.setValue(getattr(self.parent, 'icon_size', 32))
+        self.icon_size_label = QLabel(f"{self.icon_size_slider.value()}px")
+        self.icon_size_label.setFixedWidth(40)
+        self.icon_size_slider.valueChanged.connect(lambda value: self.icon_size_label.setText(f"{value}px"))
+        icon_size_layout.addWidget(self.icon_size_slider)
+        icon_size_layout.addWidget(self.icon_size_label)
+        icon_size_layout.addStretch()
+        layout.addRow("Icon Size:", icon_size_widget)
 
         customization_tab.setLayout(layout)
         self.tab_widget.addTab(customization_tab, "Customization")
@@ -432,11 +483,13 @@ class SettingsDialog(QDialog):
         self.save_buttons()
         
         # Then save general settings
+        positions = [EDGE_LEFT, EDGE_RIGHT, EDGE_TOP, EDGE_BOTTOM]
         new_settings = {
-            "dock_position": self.pos_combo.currentText(),
+            "dock_position": positions[self.pos_button_group.checkedId()],
             "transparency": self.trans_slider.value(),
             "dock_color": self.parent.dock_color,
-            "corner_radius": self.radius_spin.value(),
+            "corner_radius": self.radius_slider.value(),
+            "icon_size": self.icon_size_slider.value(),
         }
         self.parent.apply_settings(new_settings)
         
@@ -446,6 +499,23 @@ class SettingsDialog(QDialog):
         # After loading buttons, update the size to fit the content
         self.parent.update_size()
         
+        # Recreate the settings button to apply new size
+        self.parent.recreate_settings_button()
+        
+        # Force layout recalculation
+        self.parent.main_layout.invalidate()
+        self.parent.update_size()
+
+        # If position changed, we need to re-add all buttons to the new layout
+        if self.parent.edge != self.parent.old_edge_before_apply:
+            # Clear the old layout
+            for i in reversed(range(self.parent.main_layout.count())): 
+                self.parent.main_layout.itemAt(i).widget().setParent(None)
+            # Add all buttons to the new layout
+            for btn in self.parent.buttons:
+                self.parent.main_layout.addWidget(btn, alignment=Qt.AlignmentFlag.AlignCenter)
+            self.parent.main_layout.addWidget(self.parent.settings_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
     def apply_and_close_settings(self):
         """Apply settings and close the dialog."""
         self.apply_settings()
@@ -461,10 +531,10 @@ class DockButton(QToolButton):
     - Configurable tooltips and actions
     """
     
-    def __init__(self, config, parent=None):
+    def __init__(self, config, initial_icon_size=QSize(32, 32), parent=None):
         super().__init__(parent)
         self.config = config
-        self._iconSize = QSize(32, 32)  # Initial icon size
+        self._iconSize = initial_icon_size  # Initial icon size
         self.setup_button()
         
     def setup_button(self):
@@ -478,13 +548,12 @@ class DockButton(QToolButton):
             if icon_path and os.path.exists(icon_path):
                 icon = QIcon(icon_path)
                 self.setIcon(icon)
-                self.setIconSize(QSize(32, 32))  # Increased icon size to 32x32
+                self.setIconSize(self._iconSize)
                 self.setText('')  # Clear text when using icon
             else:
                 self.setText('•')  # Fallback to dot if no icon
             
             self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            self.setFixedSize(48, 48)  # Increased button size to accommodate larger icon
             self.setCursor(Qt.CursorShape.PointingHandCursor)  # Set pointing hand cursor
             
             # Configure tooltip
@@ -497,7 +566,6 @@ class DockButton(QToolButton):
             # Set fallback properties
             self.setToolTip("Error loading button")
             self.setText("•")
-            self.setFont(QFont('Arial', 14))
             self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             self.setFixedSize(40, 40)
             
@@ -517,7 +585,7 @@ class DockButton(QToolButton):
         self.zoom_animation = QPropertyAnimation(self, b'iconSize')
         self.zoom_animation.setDuration(150)
         self.zoom_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self.setIconSize(self._iconSize)
+        self.setIconSize(self._iconSize) # Ensure initial state is set
         
     def enterEvent(self, event):
         super().enterEvent(event)
@@ -525,7 +593,7 @@ class DockButton(QToolButton):
         self.zoom_animation.stop()
         # Only zoom the icon, not the button
         self.zoom_animation.setStartValue(self._iconSize)
-        self.zoom_animation.setEndValue(QSize(40, 40))  # Increase icon size to 40x40 on hover
+        self.zoom_animation.setEndValue(self._iconSize * 1.25)  # Scale icon size on hover
         self.zoom_animation.start()
         
     def leaveEvent(self, event):
@@ -534,7 +602,7 @@ class DockButton(QToolButton):
         self.zoom_animation.stop()
         # Return icon to original size
         self.zoom_animation.setStartValue(self._iconSize)
-        self.zoom_animation.setEndValue(QSize(32, 32))  # Return to default 32x32 size
+        self.zoom_animation.setEndValue(self._iconSize)  # Return to default size
         self.zoom_animation.start()
         
     def get_iconSize(self):
@@ -592,16 +660,7 @@ class DockWindow(QWidget):
         # Load and add dock buttons first
         self.load_buttons()
         
-        # Add settings button with the same style as other buttons
-        settings_config = {
-            'name': 'Settings',
-            'icon': '',  # No icon, using text
-        }
-        self.settings_btn = DockButton(settings_config, self)
-        self.settings_btn.setText("⚙")
-        self.settings_btn.setFont(QFont('Arial', 20))
-        self.settings_btn.clicked.connect(self.show_settings)
-        self.main_layout.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.recreate_settings_button()
     def load_settings(self):
         try:
             if os.path.exists(self.settings_file):
@@ -618,6 +677,7 @@ class DockWindow(QWidget):
         self.transparency = settings['transparency']
         self.dock_color = settings['dock_color']
         self.corner_radius = settings.get('corner_radius', 16)  # Default to 16 if not set
+        self.icon_size = settings.get('icon_size', 32) # Default to 32 if not set
         self.offset = 10
 
     def get_default_settings(self):
@@ -635,6 +695,7 @@ class DockWindow(QWidget):
             "transparency": 60,              # 60% transparency
             "dock_color": "#000000",         # Black background
             "corner_radius": 16,             # Rounded corners
+            "icon_size": 32,                 # Default icon size
         }
 
     def save_settings(self, settings):
@@ -710,24 +771,44 @@ class DockWindow(QWidget):
                 button.deleteLater()
             self.buttons.clear()
             
-            if hasattr(self, 'settings_btn'):
-                self.main_layout.removeWidget(self.settings_btn)
-            
             # Load and create regular buttons
             with open(self.buttons_file, 'r', encoding='utf-8-sig') as f:
                 config = json.load(f)
                 for button_config in config.get('buttons', []):
-                    button = DockButton(button_config, self)
+                    button = DockButton(
+                        button_config,
+                        initial_icon_size=QSize(self.icon_size, self.icon_size),
+                        parent=self
+                    )
                     button.clicked.connect(lambda checked, b=button_config: self.handle_button_click(b))
                     self.main_layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
                     self.buttons.append(button)
-            
-            # Always add settings button last
-            if hasattr(self, 'settings_btn'):
-                self.main_layout.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignCenter)
                     
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to load buttons: {str(e)}")
+
+    def recreate_settings_button(self):
+        """Removes the old settings button and creates a new one with current settings."""
+        # Remove existing settings button if it exists
+        if hasattr(self, 'settings_btn') and self.settings_btn:
+            self.main_layout.removeWidget(self.settings_btn)
+            self.settings_btn.deleteLater()
+
+        settings_config = {
+            'name': 'Settings',
+            'icon': '',  # No icon, using text instead
+        }
+        settings_icon_size = max(12, int(self.icon_size * 0.75))
+        settings_font_size = max(8, int(settings_icon_size * 0.5))
+        self.settings_btn = DockButton(
+            config=settings_config,
+            initial_icon_size=QSize(settings_icon_size, settings_icon_size),
+            parent=self
+        )
+        self.settings_btn.setText("⚙")
+        self.settings_btn.setFont(QFont('Arial', settings_font_size))
+        self.settings_btn.clicked.connect(self.show_settings)
+        self.main_layout.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignCenter)
             
     def handle_button_click(self, button_config):
         """Handle button clicks by executing the specified command or opening URLs."""
@@ -781,20 +862,16 @@ class DockWindow(QWidget):
         self.main_layout.setSpacing(5)
 
     def apply_settings(self, settings):
-        old_edge = self.edge
+        self.old_edge_before_apply = self.edge
         self.edge = settings['dock_position']
         self.transparency = settings['transparency']
         self.dock_color = settings['dock_color']
         self.corner_radius = settings.get('corner_radius', 16)
+        self.icon_size = settings.get('icon_size', 32)
         
         # If position changed, update layout
-        if old_edge != self.edge:
+        if self.old_edge_before_apply != self.edge:
             self.setup_layout()
-            # Re-add buttons in the new layout
-            for button in self.buttons:
-                self.main_layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
-            if hasattr(self, 'settings_btn'):
-                self.main_layout.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignCenter)
         
         self.update_size()
         self.place_dock()
