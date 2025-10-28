@@ -1,20 +1,24 @@
 # Dynamic Dock Widget
 
-A customizable, auto-hiding dock widget built with PyQt6 that provides a sleek and configurable interface for your desktop. Launch your favorite applications and tools with style!
+A customizable, auto-hiding dock widget built with PyQt6. It provides a sleek, modern, and highly configurable interface for your desktop to launch your favorite applications and tools with style!
 
 ## Features
 
 - 🔄 Auto-hiding dock with smooth animations
 - 📍 Multiple dock positions (Left, Right, Top, Bottom)
+- ⚙️ **Advanced GUI-based Settings:**
+  - Tabbed interface for easy navigation ("Customization" and "Buttons").
+  - **Full Button Management:** Add, edit, delete, and reorder buttons directly from the settings dialog.
+  - **Live Previews:** See your changes applied instantly.
 - 🎨 Customizable appearance:
   - Adjustable transparency
   - Custom color picker
-  - Dynamic sizing based on content
-- 🚀 Dynamic button loading from configuration
+  - Adjustable corner radius
+  - Configurable icon size
+- 🚀 Dynamic button loading and management
 - 🖼️ Custom icon support for buttons
-- 💫 Hover animations and tooltips
+- 💫 Tooltips for buttons
 - ⚙️ Persistent settings stored in JSON
-- 🖱️ Easy-to-use settings dialog
 
 ## Requirements
 
@@ -31,27 +35,9 @@ pip install PyQt6
 
 ## Usage
 
-1. Run the dock application:
+Run the dock application:
 ```bash
 python dock.py
-```
-
-2. Configure buttons in `buttons.json`:
-```json
-{
-    "buttons": [
-        {
-            "name": "File Explorer",
-            "icon": "icons/folder.png",
-            "action": "explorer ."
-        },
-        {
-            "name": "Terminal",
-            "icon": "icons/terminal.png",
-            "action": "wt"
-        }
-    ]
-}
 ```
 
 ### Controls
@@ -67,6 +53,7 @@ python dock.py
 
 ### Button Configuration
 
+Configure buttons using GUI elements via settings options in buttons tab.
 Each button supports:
 - `name`: Display name (shown in tooltip)
 - `icon`: Path to PNG icon file

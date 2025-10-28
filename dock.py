@@ -13,8 +13,7 @@ Features:
     * Reorder buttons with up/down controls
     * Icon file picker integration
     * Live preview of changes
-- Support for custom icons and actions
-- Hover animations and tooltips
+- Support for custom icons, actions, and tooltips
 - Persistent settings with tabbed interface
 - Customizable appearance:
     * Transparency
@@ -58,7 +57,7 @@ from PyQt6.QtWidgets import (
     QHeaderView, QFileDialog, QLineEdit
 )
 from PyQt6.QtCore import Qt, QTimer, QRect, QPropertyAnimation, QEasingCurve, QSize
-from PyQt6.QtCore import pyqtProperty as Property
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QPainter, QColor, QIcon, QFont
 
 # Dock position constants
@@ -66,6 +65,10 @@ EDGE_TOP = 'top'
 EDGE_BOTTOM = 'bottom'
 EDGE_LEFT = 'left'
 EDGE_RIGHT = 'right'
+
+# File constants
+SETTINGS_FILE = "settings.json"
+BUTTONS_FILE = "buttons.json"
 
 SHOW_TRIGGER_DISTANCE = 20  # Distance from edge to trigger show
 
@@ -79,6 +82,8 @@ class SettingsDialog(QDialog):
     - Size configuration
     """
     
+    settings_applied = pyqtSignal(dict)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent = parent
@@ -96,7 +101,7 @@ class SettingsDialog(QDialog):
         
         # Create tab widget
         self.tab_widget = QTabWidget()
-        self.setup_customization_tab()
+        self._setup_customization_tab()
         self.setup_buttons_tab()
         layout.addWidget(self.tab_widget)
         
@@ -119,7 +124,7 @@ class SettingsDialog(QDialog):
         
         self.setLayout(layout)
 
-    def setup_customization_tab(self):
+    def _setup_customization_tab(self):
         """Setup the customization tab with appearance settings"""
         from PyQt6.QtWidgets import QFormLayout
 
@@ -136,76 +141,11 @@ class SettingsDialog(QDialog):
         basic_heading.setAlignment(Qt.AlignmentFlag.AlignLeft)
         layout.addRow(basic_heading)
 
-        # Dock Position
-        pos_widget = QWidget()
-        pos_layout = QHBoxLayout(pos_widget)
-        pos_layout.setContentsMargins(0, 0, 0, 0)
-        self.pos_button_group = QButtonGroup(self)
-        self.pos_button_group.setExclusive(True)
-
-        positions = {
-            EDGE_LEFT: "Left", EDGE_RIGHT: "Right",
-            EDGE_TOP: "Top", EDGE_BOTTOM: "Bottom"
-        }
-        for edge, text in positions.items():
-            btn = QPushButton(text)
-            btn.setCheckable(True)
-            btn.setFixedWidth(70)
-            if self.parent.edge == edge:
-                btn.setChecked(True)
-            self.pos_button_group.addButton(btn, id=list(positions.keys()).index(edge))
-            pos_layout.addWidget(btn)
-        
-        pos_layout.addStretch()
-        layout.addRow("Dock Position:", pos_widget)
-
-        # Transparency
-        trans_widget = QWidget()
-        trans_layout = QHBoxLayout(trans_widget)
-        trans_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.trans_slider = QSlider(Qt.Orientation.Horizontal)
-        self.trans_slider.setMaximumWidth(300) # Reduce slider width
-        self.trans_slider.setRange(0, 100)
-        self.trans_slider.setValue(self.parent.transparency)
-        
-        self.trans_label = QLabel(f"{self.parent.transparency}%")
-        self.trans_label.setFixedWidth(40) # Give it a fixed width
-        self.trans_slider.valueChanged.connect(lambda value: self.trans_label.setText(f"{value}%"))
-        
-        trans_layout.addWidget(self.trans_slider)
-        trans_layout.addWidget(self.trans_label)
-        trans_layout.addStretch()
-        layout.addRow("Transparency:", trans_widget)
-
-        # Corner Radius
-        radius_widget = QWidget()
-        radius_layout = QHBoxLayout(radius_widget)
-        radius_layout.setContentsMargins(0, 0, 0, 0)
-        self.radius_slider = QSlider(Qt.Orientation.Horizontal)
-        self.radius_slider.setMaximumWidth(300)
-        self.radius_slider.setRange(0, 50)
-        self.radius_slider.setValue(getattr(self.parent, 'corner_radius', 16))
-        self.radius_label = QLabel(f"{self.radius_slider.value()}")
-        self.radius_label.setFixedWidth(40)
-        self.radius_slider.valueChanged.connect(lambda value: self.radius_label.setText(f"{value}"))
-        radius_layout.addWidget(self.radius_slider)
-        radius_layout.addWidget(self.radius_label)
-        radius_layout.addStretch()
-        layout.addRow("Corner Radius:", radius_widget)
-
-        # Color Picker
-        self.color_button = QPushButton()
-        self.color_button.setFixedSize(50, 25)
-        self.update_color_button(self.parent.dock_color)
-        self.color_button.clicked.connect(self.choose_color)
-        
-        # Use a small layout to keep the button from stretching
-        color_widget = QWidget()
-        color_layout = QHBoxLayout(color_widget)
-        color_layout.setContentsMargins(0, 0, 0, 0)
-        color_layout.addWidget(self.color_button, alignment=Qt.AlignmentFlag.AlignLeft)
-        layout.addRow("Dock Color:", color_widget)
+        # -- Controls --
+        layout.addRow("Dock Position:", self._create_position_controls())
+        self.trans_slider, self.trans_label = self._create_slider_control(layout, "Transparency:", 0, 100, self.parent.transparency, "%")
+        self.radius_slider, self.radius_label = self._create_slider_control(layout, "Corner Radius:", 0, 50, self.parent.corner_radius, "")
+        layout.addRow("Dock Color:", self._create_color_picker())
 
         # --- Advanced Settings ---
         advanced_heading = QLabel("<b>Advanced</b>")
@@ -214,29 +154,61 @@ class SettingsDialog(QDialog):
         advanced_heading.setContentsMargins(0, 10, 0, 0) # Add 10px space above the heading
         layout.addRow(advanced_heading)
 
-        # Icon Size
-        icon_size_widget = QWidget()
-        icon_size_layout = QHBoxLayout(icon_size_widget)
-        icon_size_layout.setContentsMargins(0, 0, 0, 0)
-        self.icon_size_slider = QSlider(Qt.Orientation.Horizontal)
-        self.icon_size_slider.setMaximumWidth(300)
-        self.icon_size_slider.setRange(16, 64) # e.g., 16px to 64px
-        self.icon_size_slider.setValue(getattr(self.parent, 'icon_size', 32))
-        self.icon_size_label = QLabel(f"{self.icon_size_slider.value()}px")
-        self.icon_size_label.setFixedWidth(40)
-        self.icon_size_slider.valueChanged.connect(lambda value: self.icon_size_label.setText(f"{value}px"))
-        icon_size_layout.addWidget(self.icon_size_slider)
-        icon_size_layout.addWidget(self.icon_size_label)
-        icon_size_layout.addStretch()
-        layout.addRow("Icon Size:", icon_size_widget)
+        self.icon_size_slider, self.icon_size_label = self._create_slider_control(layout, "Icon Size:", 16, 64, self.parent.icon_size, "px")
 
         customization_tab.setLayout(layout)
         self.tab_widget.addTab(customization_tab, "Customization")
 
-    def update_color_button(self, color):
+    def _create_position_controls(self):
+        pos_widget = QWidget()
+        pos_layout = QHBoxLayout(pos_widget)
+        pos_layout.setContentsMargins(0, 0, 0, 0)
+        self.pos_button_group = QButtonGroup(self)
+        self.pos_button_group.setExclusive(True)
+        positions = {EDGE_LEFT: "Left", EDGE_RIGHT: "Right", EDGE_TOP: "Top", EDGE_BOTTOM: "Bottom"}
+        for i, (edge, text) in enumerate(positions.items()):
+            btn = QPushButton(text)
+            btn.setCheckable(True)
+            btn.setFixedWidth(70)
+            if self.parent.edge == edge:
+                btn.setChecked(True)
+            self.pos_button_group.addButton(btn, id=i)
+            pos_layout.addWidget(btn)
+        pos_layout.addStretch()
+        return pos_widget
+
+    def _create_slider_control(self, layout, label_text, min_val, max_val, current_val, suffix=""):
+        widget = QWidget()
+        h_layout = QHBoxLayout(widget)
+        h_layout.setContentsMargins(0, 0, 0, 0)
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setMaximumWidth(300)
+        slider.setRange(min_val, max_val)
+        slider.setValue(current_val)
+        label = QLabel(f"{current_val}{suffix}")
+        label.setFixedWidth(40)
+        slider.valueChanged.connect(lambda value: label.setText(f"{value}{suffix}"))
+        h_layout.addWidget(slider)
+        h_layout.addWidget(label)
+        h_layout.addStretch()
+        layout.addRow(label_text, widget)
+        return slider, label
+
+    def _create_color_picker(self):
+        self.color_button = QPushButton()
+        self.color_button.setFixedSize(50, 25)
+        self._update_color_button(self.parent.dock_color)
+        self.color_button.clicked.connect(self._choose_color)
+        color_widget = QWidget()
+        color_layout = QHBoxLayout(color_widget)
+        color_layout.setContentsMargins(0, 0, 0, 0)
+        color_layout.addWidget(self.color_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        return color_widget
+
+    def _update_color_button(self, color):
         self.color_button.setStyleSheet(f"background-color: {color};")
 
-    def choose_color(self):
+    def _choose_color(self):
         color_dialog = QColorDialog(QColor(self.parent.dock_color), self)
         color_dialog.setWindowFlags(
             color_dialog.windowFlags() |
@@ -248,7 +220,7 @@ class SettingsDialog(QDialog):
             color = color_dialog.currentColor()
             if color.isValid():
                 self.parent.dock_color = color.name()
-                self.update_color_button(color.name())
+                self._update_color_button(color.name())
 
     def setup_buttons_tab(self):
         """Setup the buttons tab with CRUD operations"""
@@ -293,7 +265,7 @@ class SettingsDialog(QDialog):
     def load_buttons_to_table(self, add_empty_row=False):
         """Load current buttons into the table"""
         try:
-            with open(self.parent.buttons_file, 'r', encoding='utf-8-sig') as f:
+            with open(BUTTONS_FILE, 'r', encoding='utf-8-sig') as f:
                 config = json.load(f)
                 buttons = config.get('buttons', [])
                 
@@ -487,34 +459,11 @@ class SettingsDialog(QDialog):
         new_settings = {
             "dock_position": positions[self.pos_button_group.checkedId()],
             "transparency": self.trans_slider.value(),
-            "dock_color": self.parent.dock_color,
             "corner_radius": self.radius_slider.value(),
+            "dock_color": self.parent.dock_color,
             "icon_size": self.icon_size_slider.value(),
         }
-        self.parent.apply_settings(new_settings)
-        
-        # Reload dock buttons to reflect new order
-        self.parent.load_buttons()
-        
-        # After loading buttons, update the size to fit the content
-        self.parent.update_size()
-        
-        # Recreate the settings button to apply new size
-        self.parent.recreate_settings_button()
-        
-        # Force layout recalculation
-        self.parent.main_layout.invalidate()
-        self.parent.update_size()
-
-        # If position changed, we need to re-add all buttons to the new layout
-        if self.parent.edge != self.parent.old_edge_before_apply:
-            # Clear the old layout
-            for i in reversed(range(self.parent.main_layout.count())): 
-                self.parent.main_layout.itemAt(i).widget().setParent(None)
-            # Add all buttons to the new layout
-            for btn in self.parent.buttons:
-                self.parent.main_layout.addWidget(btn, alignment=Qt.AlignmentFlag.AlignCenter)
-            self.parent.main_layout.addWidget(self.parent.settings_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.settings_applied.emit(new_settings)
 
     def apply_and_close_settings(self):
         """Apply settings and close the dialog."""
@@ -525,7 +474,6 @@ class DockButton(QToolButton):
     """Custom button class for the dock with hover animations and tooltips.
     
     Features:
-    - Hover animations with zoom effect
     - Custom styling with transparent background
     - Fallback handling for fonts and icons
     - Configurable tooltips and actions
@@ -534,8 +482,8 @@ class DockButton(QToolButton):
     def __init__(self, config, initial_icon_size=QSize(32, 32), parent=None):
         super().__init__(parent)
         self.config = config
-        self._iconSize = initial_icon_size  # Initial icon size
         self.setup_button()
+        self.setIconSize(initial_icon_size)
         
     def setup_button(self):
         try:
@@ -545,10 +493,9 @@ class DockButton(QToolButton):
             
             # Handle icon
             icon_path = self.config.get('icon', '')
-            if icon_path and os.path.exists(icon_path):
+            if icon_path and Path(icon_path).exists():
                 icon = QIcon(icon_path)
                 self.setIcon(icon)
-                self.setIconSize(self._iconSize)
                 self.setText('')  # Clear text when using icon
             else:
                 self.setText('•')  # Fallback to dot if no icon
@@ -574,45 +521,12 @@ class DockButton(QToolButton):
             QToolButton {
                 background-color: transparent;
                 border: none;
-                padding: 8px;
+                padding: 2px;
             }
             QToolButton:pressed {
                 background-color: transparent;
             }
         """)
-        
-        # Setup hover animation for icon size
-        self.zoom_animation = QPropertyAnimation(self, b'iconSize')
-        self.zoom_animation.setDuration(150)
-        self.zoom_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self.setIconSize(self._iconSize) # Ensure initial state is set
-        
-    def enterEvent(self, event):
-        super().enterEvent(event)
-        # Stop any running animations
-        self.zoom_animation.stop()
-        # Only zoom the icon, not the button
-        self.zoom_animation.setStartValue(self._iconSize)
-        self.zoom_animation.setEndValue(self._iconSize * 1.25)  # Scale icon size on hover
-        self.zoom_animation.start()
-        
-    def leaveEvent(self, event):
-        super().leaveEvent(event)
-        # Stop any running animations
-        self.zoom_animation.stop()
-        # Return icon to original size
-        self.zoom_animation.setStartValue(self._iconSize)
-        self.zoom_animation.setEndValue(self._iconSize)  # Return to default size
-        self.zoom_animation.start()
-        
-    def get_iconSize(self):
-        return self._iconSize
-        
-    def set_iconSize(self, size):
-        self._iconSize = size
-        super().setIconSize(size)
-        
-    iconSize = Property(QSize, get_iconSize, set_iconSize)
 
 class DockWindow(QWidget):
     """Main dock widget with auto-hide functionality and customizable appearance.
@@ -623,13 +537,12 @@ class DockWindow(QWidget):
     - Adjustable transparency and color
     - Dynamic sizing based on content
     - Persistent settings via JSON storage
-    - Custom dock buttons with animations
     """
     
     def __init__(self):
         super().__init__()
-        self.settings_file = "settings.json"
-        self.buttons_file = "buttons.json"
+        self.settings_file = Path(SETTINGS_FILE)
+        self.buttons_file = Path(BUTTONS_FILE)
         self.load_settings()
         self.buttons = []
         
@@ -663,13 +576,13 @@ class DockWindow(QWidget):
         self.recreate_settings_button()
     def load_settings(self):
         try:
-            if os.path.exists(self.settings_file):
-                with open(self.settings_file, 'r') as f:
+            if self.settings_file.exists():
+                with self.settings_file.open('r') as f:
                     settings = json.load(f)
             else:
                 settings = self.get_default_settings()
                 self.save_settings(settings)
-        except Exception as e:
+        except (json.JSONDecodeError, IOError):
             settings = self.get_default_settings()
             self.save_settings(settings)
 
@@ -693,14 +606,14 @@ class DockWindow(QWidget):
         return {
             "dock_position": EDGE_LEFT,      # Start on left edge
             "transparency": 60,              # 60% transparency
-            "dock_color": "#000000",         # Black background
             "corner_radius": 16,             # Rounded corners
+            "dock_color": "#000000",         # Black background
             "icon_size": 32,                 # Default icon size
         }
 
     def save_settings(self, settings):
         try:
-            with open(self.settings_file, 'w') as f:
+            with self.settings_file.open('w') as f:
                 json.dump(settings, f, indent=4)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to save settings: {str(e)}")
@@ -710,6 +623,7 @@ class DockWindow(QWidget):
         if self.is_hidden:
             self.start_show_animation()
         dialog = SettingsDialog(self)
+        dialog.settings_applied.connect(self.apply_settings)
         dialog.finished.connect(self._on_settings_dialog_closed)
         dialog.exec()
 
@@ -725,29 +639,19 @@ class DockWindow(QWidget):
         default_buttons = {
             "buttons": [
                 {
-                    "name": "File Explorer",
-                    "icon": "icons/folder.png",
-                    "action": "explorer ."
-                },
-                {
-                    "name": "Command Prompt",
-                    "icon": "icons/terminal.png",
-                    "action": "cmd"
-                },
-                {
-                    "name": "Web Browser",
-                    "icon": "icons/chrome.png",
+                    "name": "Google",
+                    "icon": "icons/google.png",
                     "action": "https://www.google.com"
                 }
             ]
         }
         try:
             # Ensure the icons directory exists
-            icons_dir = os.path.join(os.path.dirname(self.buttons_file), "icons")
-            os.makedirs(icons_dir, exist_ok=True)
+            icons_dir = self.buttons_file.parent / "icons"
+            icons_dir.mkdir(exist_ok=True)
             
             # Create the buttons configuration
-            with open(self.buttons_file, 'w', encoding='utf-8') as f:
+            with self.buttons_file.open('w', encoding='utf-8') as f:
                 json.dump(default_buttons, f, indent=4)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to create buttons file: {str(e)}")
@@ -761,7 +665,7 @@ class DockWindow(QWidget):
         Creates a default buttons.json if it doesn't exist.
         """
         # Create default buttons file if it doesn't exist
-        if not os.path.exists(self.buttons_file):
+        if not self.buttons_file.exists():
             self.create_default_buttons_file()
         
         try:
@@ -772,7 +676,7 @@ class DockWindow(QWidget):
             self.buttons.clear()
             
             # Load and create regular buttons
-            with open(self.buttons_file, 'r', encoding='utf-8-sig') as f:
+            with self.buttons_file.open('r', encoding='utf-8-sig') as f:
                 config = json.load(f)
                 for button_config in config.get('buttons', []):
                     button = DockButton(
@@ -819,25 +723,20 @@ class DockWindow(QWidget):
                 if action.startswith(('http://', 'https://', 'www.')):
                     # Open URLs in default browser
                     webbrowser.open(action)
-                elif os.path.exists(action) or os.path.exists(os.path.expandvars(action)):
-                    # Handle directory or file paths
-                    # Expand environment variables if present
-                    expanded_path = os.path.expandvars(action)
-                    if os.path.isdir(expanded_path):
-                        # For directories, use explorer.exe with /select flag
-                        subprocess.Popen(['explorer', expanded_path], shell=False)
-                    else:
-                        # For files, use the default associated program
-                        os.startfile(expanded_path)
                 else:
-                    # Run other commands in a non-blocking way
-                    # Split the command and arguments to avoid shell=True security issues
-                    try:
-                        # First try to split and run without shell
-                        subprocess.Popen(action.split(), shell=False)
-                    except (FileNotFoundError, subprocess.SubprocessError):
-                        # Fallback to shell=True for complex commands
-                        subprocess.Popen(action, shell=True)
+                    # Expand environment variables for paths
+                    expanded_action = os.path.expandvars(action)
+                    action_path = Path(expanded_action)
+                    if action_path.exists():
+                        os.startfile(action_path)
+                    else:
+                        # Run other commands in a non-blocking way
+                        # Split the command and arguments to avoid shell=True security issues
+                        try:
+                            subprocess.Popen(action.split(), shell=False)
+                        except (FileNotFoundError, OSError):
+                            # Fallback to shell=True for complex commands (e.g., with pipes)
+                            subprocess.Popen(action, shell=True)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to execute action: {str(e)}")
 
@@ -858,26 +757,44 @@ class DockWindow(QWidget):
         else:
             self.main_layout = QHBoxLayout(self)
         
-        self.main_layout.setContentsMargins(5, 5, 5, 5)
+        self.main_layout.setContentsMargins(8, 8, 8, 8)
         self.main_layout.setSpacing(5)
 
     def apply_settings(self, settings):
-        self.old_edge_before_apply = self.edge
+        old_edge = self.edge
         self.edge = settings['dock_position']
         self.transparency = settings['transparency']
-        self.dock_color = settings['dock_color']
         self.corner_radius = settings.get('corner_radius', 16)
+        self.dock_color = settings['dock_color']
         self.icon_size = settings.get('icon_size', 32)
         
+        self.save_settings(settings)
+        
         # If position changed, update layout
-        if self.old_edge_before_apply != self.edge:
+        if old_edge != self.edge:
             self.setup_layout()
         
+        # Reload buttons to reflect new order and apply new icon size
+        self.load_buttons()
+        
+        # Recreate the settings button to apply new size
+        self.recreate_settings_button()
+        
+        # If position changed, we need to re-add all buttons to the new layout
+        if old_edge != self.edge:
+            # Add all buttons to the new layout
+            for btn in self.buttons:
+                self.main_layout.addWidget(btn, alignment=Qt.AlignmentFlag.AlignCenter)
+            self.main_layout.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Force layout recalculation and update size
+        self.main_layout.invalidate()
         self.update_size()
+        
+        # Reposition the dock
         self.place_dock()
         self.update()
-        self.save_settings(settings)
-
+        
     def update_size(self):
         """Resizes the dock to fit its contents."""
         # Let the layout manager calculate the optimal size.
@@ -904,16 +821,15 @@ class DockWindow(QWidget):
 
     def place_dock(self):
         screen = QApplication.primaryScreen().geometry()
-        if self.edge == EDGE_TOP:
-            self.move((screen.width() - self.width()) // 2, self.offset)
-        elif self.edge == EDGE_BOTTOM:
-            self.move((screen.width() - self.width()) // 2, screen.height() - self.height() - self.offset)
-        elif self.edge == EDGE_LEFT:
-            self.move(self.offset, (screen.height() - self.height()) // 2)
-        elif self.edge == EDGE_RIGHT:
-            self.move(screen.width() - self.width() - self.offset, (screen.height() - self.height()) // 2)
-
+        is_horizontal = self.edge in [EDGE_TOP, EDGE_BOTTOM]
+        
+        x = (screen.width() - self.width()) // 2 if is_horizontal else (self.offset if self.edge == EDGE_LEFT else screen.width() - self.width() - self.offset)
+        y = (screen.height() - self.height()) // 2 if not is_horizontal else (self.offset if self.edge == EDGE_TOP else screen.height() - self.height() - self.offset)
+        
+        self.move(x, y)
+        
     def enterEvent(self, event):
+        """Show the dock when the mouse enters its area."""
         self.hide_timer.stop()
         if self.is_hidden:
             self.start_show_animation()
@@ -922,6 +838,7 @@ class DockWindow(QWidget):
         self.hide_timer.start(500)  # Start hide timer with 500ms delay
 
     def start_hide_animation(self):
+        """Animate the dock to its hidden position."""
         if not self.is_hidden and not self.settings_dialog_open:
             self.is_hidden = True
             target_geometry = self.get_hidden_geometry()
@@ -930,6 +847,7 @@ class DockWindow(QWidget):
             self.animation.start()
 
     def start_show_animation(self):
+        """Animate the dock to its visible position."""
         if self.is_hidden:
             self.is_hidden = False
             target_geometry = self.get_visible_geometry()
@@ -938,27 +856,27 @@ class DockWindow(QWidget):
             self.animation.start()
 
     def get_hidden_geometry(self):
+        """Calculate the geometry for the dock when it's hidden."""
         current = self.geometry()
         screen = QApplication.primaryScreen().geometry()
-        if self.edge == EDGE_LEFT:
-            return QRect(-self.width() + 5, current.y(), current.width(), current.height())
-        elif self.edge == EDGE_RIGHT:
-            return QRect(screen.width() - 5, current.y(), current.width(), current.height())
-        elif self.edge == EDGE_TOP:
-            return QRect(current.x(), -self.height() + 5, current.width(), current.height())
-        else:  # EDGE_BOTTOM
-            return QRect(current.x(), screen.height() - 5, current.width(), current.height())
+        x, y = current.x(), current.y()
+        
+        if self.edge == EDGE_LEFT: x = -self.width() + 5
+        elif self.edge == EDGE_RIGHT: x = screen.width() - 5
+        elif self.edge == EDGE_TOP: y = -self.height() + 5
+        elif self.edge == EDGE_BOTTOM: y = screen.height() - 5
+            
+        return QRect(x, y, current.width(), current.height())
 
     def get_visible_geometry(self):
+        """Calculate the geometry for the dock when it's visible."""
         screen = QApplication.primaryScreen().geometry()
-        if self.edge == EDGE_TOP:
-            return QRect((screen.width() - self.width()) // 2, self.offset, self.width(), self.height())
-        elif self.edge == EDGE_BOTTOM:
-            return QRect((screen.width() - self.width()) // 2, screen.height() - self.height() - self.offset, self.width(), self.height())
-        elif self.edge == EDGE_LEFT:
-            return QRect(self.offset, (screen.height() - self.height()) // 2, self.width(), self.height())
-        else:  # EDGE_RIGHT
-            return QRect(screen.width() - self.width() - self.offset, (screen.height() - self.height()) // 2, self.width(), self.height())
+        is_horizontal = self.edge in [EDGE_TOP, EDGE_BOTTOM]
+        
+        x = (screen.width() - self.width()) // 2 if is_horizontal else (self.offset if self.edge == EDGE_LEFT else screen.width() - self.width() - self.offset)
+        y = (screen.height() - self.height()) // 2 if not is_horizontal else (self.offset if self.edge == EDGE_TOP else screen.height() - self.height() - self.offset)
+        
+        return QRect(x, y, self.width(), self.height())
 
 
 if __name__ == "__main__":
