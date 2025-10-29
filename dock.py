@@ -60,6 +60,9 @@ from PyQt6.QtCore import Qt, QTimer, QRect, QPropertyAnimation, QEasingCurve, QS
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QPainter, QColor, QIcon, QFont
 
+# Application version
+__version__ = "0.1.0"
+
 # Dock position constants
 EDGE_TOP = 'top'
 EDGE_BOTTOM = 'bottom'
@@ -103,6 +106,7 @@ class SettingsDialog(QDialog):
         self.tab_widget = QTabWidget()
         self._setup_customization_tab()
         self.setup_buttons_tab()
+        self._setup_info_tab()
         layout.addWidget(self.tab_widget)
         
         # Bottom buttons
@@ -124,39 +128,113 @@ class SettingsDialog(QDialog):
         
         self.setLayout(layout)
 
+    def _setup_info_tab(self):
+        """Setup the info tab with application details."""
+        from PyQt6.QtWidgets import QFormLayout, QFrame
+
+        info_tab = QWidget()
+        main_layout = QVBoxLayout(info_tab)
+        main_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+
+        # Create a styled frame for the content
+        content_frame = QFrame()
+        content_frame.setObjectName("infoFrame")
+        content_frame.setFixedWidth(500)
+        # The frame is just a container, so no specific styling is needed.
+        frame_layout = QVBoxLayout(content_frame)
+        frame_layout.setContentsMargins(25, 25, 25, 25)
+        frame_layout.setSpacing(15)
+        frame_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        # App Icon
+        icon_label = QLabel()
+        icon_label.setPixmap(QIcon("app.ico").pixmap(64, 64))
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(icon_label)
+
+        # Title and Version
+        title_font = QFont()
+        title_font.setPointSize(16)
+        title_font.setBold(True)
+        title_label = QLabel("Dynamic Dock Widget")
+        title_label.setFont(title_font)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(title_label)
+
+        version_label = QLabel(f"Version {__version__}")
+        version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(version_label)
+
+        frame_layout.addSpacing(15)
+
+        # Description
+        desc_text = "A customizable, auto-hiding dock widget built with PyQt6. It provides a sleek, modern, and highly configurable interface for your desktop."
+        desc_label = QLabel(desc_text)
+        desc_label.setWordWrap(True)
+        desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(desc_label)
+
+        frame_layout.addSpacing(15)
+
+        # Details Section
+        form_layout = QFormLayout()
+        form_layout.setSpacing(10)
+
+        author_label = QLabel("Demand Module")
+        form_layout.addRow("<b>Author:</b>", author_label)
+
+        license_label = QLabel("MIT License")
+        form_layout.addRow("<b>License:</b>", license_label)
+
+        repo_label = QLabel("<a href='https://github.com/demandmodule-star/dock'>https://github.com/demandmodule-star/dock</a>")
+        repo_label.setOpenExternalLinks(True)
+        form_layout.addRow("<b>Repository:</b>", repo_label)
+        frame_layout.addLayout(form_layout)
+
+        main_layout.addWidget(content_frame)
+        self.tab_widget.addTab(info_tab, "Info")
+
     def _setup_customization_tab(self):
         """Setup the customization tab with appearance settings"""
-        from PyQt6.QtWidgets import QFormLayout
+        from PyQt6.QtWidgets import QFormLayout, QLabel
 
         customization_tab = QWidget()
-        layout = QFormLayout()
-        layout.setContentsMargins(20, 20, 20, 20) # Add some padding
-        layout.setSpacing(15) # Increase spacing between rows
-        
-        # --- Basic Settings ---
-        basic_heading = QLabel("<b>Basic</b>")
+        main_layout = QVBoxLayout(customization_tab)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(15) # Reduced spacing slightly for a tighter feel
+        main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        # --- Basic Settings Section ---
+        basic_heading = QLabel("<b>Basic Settings</b>")
         font = basic_heading.font()
-        font.setPointSize(font.pointSize() + 2) # Increase font size
+        font.setPointSize(font.pointSize() + 2)
+        font.setBold(True)
         basic_heading.setFont(font)
-        basic_heading.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        layout.addRow(basic_heading)
+        main_layout.addWidget(basic_heading)
 
-        # -- Controls --
-        layout.addRow("Dock Position:", self._create_position_controls())
-        self.trans_slider, self.trans_label = self._create_slider_control(layout, "Transparency:", 0, 100, self.parent.transparency, "%")
-        self.radius_slider, self.radius_label = self._create_slider_control(layout, "Corner Radius:", 0, 50, self.parent.corner_radius, "")
-        layout.addRow("Dock Color:", self._create_color_picker())
+        basic_form_layout = QFormLayout()
+        basic_form_layout.setSpacing(10) # Spacing within the form layout
+        basic_form_layout.addRow("Dock Position:", self._create_position_controls())
+        self.trans_slider, self.trans_label = self._create_slider_control(basic_form_layout, "Transparency:", 0, 100, self.parent.transparency, "%")
+        self.radius_slider, self.radius_label = self._create_slider_control(basic_form_layout, "Corner Radius:", 0, 50, self.parent.corner_radius, "px")
+        basic_form_layout.addRow("Dock Color:", self._create_color_picker())
+        main_layout.addLayout(basic_form_layout)
 
-        # --- Advanced Settings ---
-        advanced_heading = QLabel("<b>Advanced</b>")
-        advanced_heading.setFont(font) # Use the same larger font
-        advanced_heading.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        advanced_heading.setContentsMargins(0, 10, 0, 0) # Add 10px space above the heading
-        layout.addRow(advanced_heading)
+        main_layout.addSpacing(20) # Visual separator between sections
 
-        self.icon_size_slider, self.icon_size_label = self._create_slider_control(layout, "Icon Size:", 16, 64, self.parent.icon_size, "px")
+        # --- Advanced Settings Section ---
+        advanced_heading = QLabel("<b>Advanced Settings</b>")
+        advanced_heading.setFont(font) # Use the same font for consistency
+        main_layout.addWidget(advanced_heading)
 
-        customization_tab.setLayout(layout)
+        advanced_form_layout = QFormLayout()
+        advanced_form_layout.setSpacing(10) # Spacing within the form layout
+        self.icon_size_slider, self.icon_size_label = self._create_slider_control(advanced_form_layout, "Icon Size:", 16, 64, self.parent.icon_size, "px")
+        self.spacing_slider, self.spacing_label = self._create_slider_control(advanced_form_layout, "Layout Spacing:", 0, 30, self.parent.layout_spacing, "px")
+        self.offset_slider, self.offset_label = self._create_slider_control(advanced_form_layout, "Dock Offset:", 0, 100, self.parent.dock_offset, "px")
+        main_layout.addLayout(advanced_form_layout)
+        
         self.tab_widget.addTab(customization_tab, "Customization")
 
     def _create_position_controls(self):
@@ -462,6 +540,8 @@ class SettingsDialog(QDialog):
             "corner_radius": self.radius_slider.value(),
             "dock_color": self.parent.dock_color,
             "icon_size": self.icon_size_slider.value(),
+            "layout_spacing": self.spacing_slider.value(),
+            "dock_offset": self.offset_slider.value(),
         }
         self.settings_applied.emit(new_settings)
 
@@ -591,7 +671,8 @@ class DockWindow(QWidget):
         self.dock_color = settings['dock_color']
         self.corner_radius = settings.get('corner_radius', 16)  # Default to 16 if not set
         self.icon_size = settings.get('icon_size', 32) # Default to 32 if not set
-        self.offset = 10
+        self.layout_spacing = settings.get('layout_spacing', 5)
+        self.dock_offset = settings.get('dock_offset', 10)
 
     def get_default_settings(self):
         """Get default settings for first-time initialization.
@@ -609,6 +690,8 @@ class DockWindow(QWidget):
             "corner_radius": 16,             # Rounded corners
             "dock_color": "#000000",         # Black background
             "icon_size": 32,                 # Default icon size
+            "layout_spacing": 5,             # Default space between icons
+            "dock_offset": 10,               # Default distance from screen edge
         }
 
     def save_settings(self, settings):
@@ -758,7 +841,7 @@ class DockWindow(QWidget):
             self.main_layout = QHBoxLayout(self)
         
         self.main_layout.setContentsMargins(8, 8, 8, 8)
-        self.main_layout.setSpacing(5)
+        self.main_layout.setSpacing(self.layout_spacing)
 
     def apply_settings(self, settings):
         old_edge = self.edge
@@ -767,12 +850,15 @@ class DockWindow(QWidget):
         self.corner_radius = settings.get('corner_radius', 16)
         self.dock_color = settings['dock_color']
         self.icon_size = settings.get('icon_size', 32)
+        self.layout_spacing = settings.get('layout_spacing', 5)
+        self.dock_offset = settings.get('dock_offset', 10)
         
         self.save_settings(settings)
         
         # If position changed, update layout
         if old_edge != self.edge:
             self.setup_layout()
+        self.main_layout.setSpacing(self.layout_spacing)
         
         # Reload buttons to reflect new order and apply new icon size
         self.load_buttons()
@@ -823,8 +909,8 @@ class DockWindow(QWidget):
         screen = QApplication.primaryScreen().geometry()
         is_horizontal = self.edge in [EDGE_TOP, EDGE_BOTTOM]
         
-        x = (screen.width() - self.width()) // 2 if is_horizontal else (self.offset if self.edge == EDGE_LEFT else screen.width() - self.width() - self.offset)
-        y = (screen.height() - self.height()) // 2 if not is_horizontal else (self.offset if self.edge == EDGE_TOP else screen.height() - self.height() - self.offset)
+        x = (screen.width() - self.width()) // 2 if is_horizontal else (self.dock_offset if self.edge == EDGE_LEFT else screen.width() - self.width() - self.dock_offset)
+        y = (screen.height() - self.height()) // 2 if not is_horizontal else (self.dock_offset if self.edge == EDGE_TOP else screen.height() - self.height() - self.dock_offset)
         
         self.move(x, y)
         
@@ -873,8 +959,8 @@ class DockWindow(QWidget):
         screen = QApplication.primaryScreen().geometry()
         is_horizontal = self.edge in [EDGE_TOP, EDGE_BOTTOM]
         
-        x = (screen.width() - self.width()) // 2 if is_horizontal else (self.offset if self.edge == EDGE_LEFT else screen.width() - self.width() - self.offset)
-        y = (screen.height() - self.height()) // 2 if not is_horizontal else (self.offset if self.edge == EDGE_TOP else screen.height() - self.height() - self.offset)
+        x = (screen.width() - self.width()) // 2 if is_horizontal else (self.dock_offset if self.edge == EDGE_LEFT else screen.width() - self.width() - self.dock_offset)
+        y = (screen.height() - self.height()) // 2 if not is_horizontal else (self.dock_offset if self.edge == EDGE_TOP else screen.height() - self.height() - self.dock_offset)
         
         return QRect(x, y, self.width(), self.height())
 

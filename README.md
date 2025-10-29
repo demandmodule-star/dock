@@ -7,7 +7,7 @@ A customizable, auto-hiding dock widget built with PyQt6. It provides a sleek, m
 - 🔄 Auto-hiding dock with smooth animations
 - 📍 Multiple dock positions (Left, Right, Top, Bottom)
 - ⚙️ **Advanced GUI-based Settings:**
-  - Tabbed interface for easy navigation ("Customization" and "Buttons").
+  - Tabbed interface for easy navigation ("Customization", "Buttons", and "Info").
   - **Full Button Management:** Add, edit, delete, and reorder buttons directly from the settings dialog.
   - **Live Previews:** See your changes applied instantly.
 - 🎨 Customizable appearance:
@@ -15,6 +15,8 @@ A customizable, auto-hiding dock widget built with PyQt6. It provides a sleek, m
   - Custom color picker
   - Adjustable corner radius
   - Configurable icon size
+  - Adjustable layout spacing between icons
+  - Adjustable dock offset from the screen edge
 - 🚀 Dynamic button loading and management
 - 🖼️ Custom icon support for buttons
 - 💫 Tooltips for buttons
@@ -49,7 +51,9 @@ python dock.py
   - Dock position on screen
   - Background transparency
   - Dock color
-  - Size preferences
+  - Icon size
+  - Layout spacing
+  - Dock offset from screen edge
 
 ### Button Configuration
 
@@ -65,6 +69,16 @@ All settings are automatically saved and persisted between sessions:
 - `settings.json`: Stores dock position, appearance, and size
 - `buttons.json`: Stores button configurations
 - Default configurations are created on first run
+
+## Screenshots
+
+Get a glimpse of the Dynamic Dock Widget in action!
+
+### Dock in action
+![Dock Preview](./screenshots/dock_preview.png)
+
+### Settings Dialog
+![Settings Dialog](./screenshots/settings_dialog.png)
 
 ## Development
 
