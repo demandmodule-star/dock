@@ -58,7 +58,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, QRect, QPropertyAnimation, QEasingCurve, QSize
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QIcon, QFont
+from PyQt6.QtGui import QPainter, QColor, QIcon, QFont, QPen
 
 # Application version
 __version__ = "0.1.0"
@@ -197,43 +197,71 @@ class SettingsDialog(QDialog):
 
     def _setup_customization_tab(self):
         """Setup the customization tab with appearance settings"""
-        from PyQt6.QtWidgets import QFormLayout, QLabel
+        from PyQt6.QtWidgets import QFormLayout, QLabel, QScrollArea
 
         customization_tab = QWidget()
-        main_layout = QVBoxLayout(customization_tab)
+        # Main layout for the tab, which will hold the scroll area
+        tab_layout = QVBoxLayout(customization_tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Create a scroll area to make the content scrollable
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        tab_layout.addWidget(scroll_area)
+
+        # Create a container widget for the scroll area's content
+        scroll_content_widget = QWidget()
+        scroll_area.setWidget(scroll_content_widget)
+
+        # This layout will hold all the settings sections inside the scrollable widget
+        main_layout = QVBoxLayout(scroll_content_widget)
         main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15) # Reduced spacing slightly for a tighter feel
+        main_layout.setSpacing(15)
         main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # --- Basic Settings Section ---
-        basic_heading = QLabel("<b>Basic Settings</b>")
-        font = basic_heading.font()
+        # --- Position & Sizing Section ---
+        position_heading = QLabel("<b>Position & Sizing</b>")
+        font = position_heading.font()
         font.setPointSize(font.pointSize() + 2)
         font.setBold(True)
-        basic_heading.setFont(font)
-        main_layout.addWidget(basic_heading)
+        position_heading.setFont(font)
+        main_layout.addWidget(position_heading)
 
-        basic_form_layout = QFormLayout()
-        basic_form_layout.setSpacing(10) # Spacing within the form layout
-        basic_form_layout.addRow("Dock Position:", self._create_position_controls())
-        self.trans_slider, self.trans_label = self._create_slider_control(basic_form_layout, "Transparency:", 0, 100, self.parent.transparency, "%")
-        self.radius_slider, self.radius_label = self._create_slider_control(basic_form_layout, "Corner Radius:", 0, 50, self.parent.corner_radius, "px")
-        basic_form_layout.addRow("Dock Color:", self._create_color_picker())
-        main_layout.addLayout(basic_form_layout)
+        position_form_layout = QFormLayout()
+        position_form_layout.setSpacing(10)
+        position_form_layout.addRow("Dock Position:", self._create_position_controls())
+        self.offset_slider, self.offset_label = self._create_slider_control(position_form_layout, "Dock Offset:", 0, 100, self.parent.dock_offset, "px")
+        main_layout.addLayout(position_form_layout)
 
         main_layout.addSpacing(20) # Visual separator between sections
 
-        # --- Advanced Settings Section ---
-        advanced_heading = QLabel("<b>Advanced Settings</b>")
-        advanced_heading.setFont(font) # Use the same font for consistency
-        main_layout.addWidget(advanced_heading)
+        # --- Appearance Section ---
+        appearance_heading = QLabel("<b>Appearance</b>")
+        appearance_heading.setFont(font)
+        main_layout.addWidget(appearance_heading)
 
-        advanced_form_layout = QFormLayout()
-        advanced_form_layout.setSpacing(10) # Spacing within the form layout
-        self.icon_size_slider, self.icon_size_label = self._create_slider_control(advanced_form_layout, "Icon Size:", 16, 64, self.parent.icon_size, "px")
-        self.spacing_slider, self.spacing_label = self._create_slider_control(advanced_form_layout, "Layout Spacing:", 0, 30, self.parent.layout_spacing, "px")
-        self.offset_slider, self.offset_label = self._create_slider_control(advanced_form_layout, "Dock Offset:", 0, 100, self.parent.dock_offset, "px")
-        main_layout.addLayout(advanced_form_layout)
+        appearance_form_layout = QFormLayout()
+        appearance_form_layout.setSpacing(10)
+        appearance_form_layout.addRow("Dock Color:", self._create_color_picker())
+        self.trans_slider, self.trans_label = self._create_slider_control(appearance_form_layout, "Transparency:", 0, 100, self.parent.transparency, "%")
+        self.radius_slider, self.radius_label = self._create_slider_control(appearance_form_layout, "Corner Radius:", 0, 50, self.parent.corner_radius, "px")
+        appearance_form_layout.addRow("Border Color:", self._create_border_color_picker())
+        self.border_width_slider, self.border_width_label = self._create_slider_control(appearance_form_layout, "Border Width:", 0, 10, self.parent.border_width, "px", scale=2)
+        main_layout.addLayout(appearance_form_layout)
+
+        main_layout.addSpacing(20)
+
+        # --- Content Section ---
+        content_heading = QLabel("<b>Content</b>")
+        content_heading.setFont(font)
+        main_layout.addWidget(content_heading)
+
+        content_form_layout = QFormLayout()
+        content_form_layout.setSpacing(10)
+        self.icon_size_slider, self.icon_size_label = self._create_slider_control(content_form_layout, "Icon Size:", 16, 64, self.parent.icon_size, "px")
+        self.spacing_slider, self.spacing_label = self._create_slider_control(content_form_layout, "Layout Spacing:", 0, 30, self.parent.layout_spacing, "px")
+        main_layout.addLayout(content_form_layout)
         
         self.tab_widget.addTab(customization_tab, "Customization")
 
@@ -255,17 +283,30 @@ class SettingsDialog(QDialog):
         pos_layout.addStretch()
         return pos_widget
 
-    def _create_slider_control(self, layout, label_text, min_val, max_val, current_val, suffix=""):
+    def _create_slider_control(self, layout, label_text, min_val, max_val, current_val, suffix="", scale=1):
         widget = QWidget()
         h_layout = QHBoxLayout(widget)
         h_layout.setContentsMargins(0, 0, 0, 0)
         slider = QSlider(Qt.Orientation.Horizontal)
         slider.setMaximumWidth(300)
-        slider.setRange(min_val, max_val)
-        slider.setValue(current_val)
-        label = QLabel(f"{current_val}{suffix}")
+        slider.setRange(min_val * scale, max_val * scale)
+        slider.setValue(int(current_val * scale))
+        
+        # Format label text to show float if scale is not 1, otherwise int
+        label_text_format = "{:.1f}" if scale != 1 else "{:d}"
+        label = QLabel(f"{label_text_format.format(current_val)}{suffix}")
         label.setFixedWidth(40)
-        slider.valueChanged.connect(lambda value: label.setText(f"{value}{suffix}"))
+
+        def update_label(value):
+            display_value = value / scale
+            # If the format is for an integer ('d'), we must cast the display_value
+            # to an int first to prevent the ValueError.
+            if 'd' in label_text_format:
+                display_value = int(display_value)
+            
+            label.setText(f"{label_text_format.format(display_value)}{suffix}")
+
+        slider.valueChanged.connect(update_label)
         h_layout.addWidget(slider)
         h_layout.addWidget(label)
         h_layout.addStretch()
@@ -283,8 +324,22 @@ class SettingsDialog(QDialog):
         color_layout.addWidget(self.color_button, alignment=Qt.AlignmentFlag.AlignLeft)
         return color_widget
 
+    def _create_border_color_picker(self):
+        self.border_color_button = QPushButton()
+        self.border_color_button.setFixedSize(50, 25)
+        self._update_border_color_button(self.parent.border_color)
+        self.border_color_button.clicked.connect(self._choose_border_color)
+        border_color_widget = QWidget()
+        border_color_layout = QHBoxLayout(border_color_widget)
+        border_color_layout.setContentsMargins(0, 0, 0, 0)
+        border_color_layout.addWidget(self.border_color_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        return border_color_widget
+
+    def _update_border_color_button(self, color):
+        self.border_color_button.setStyleSheet(f"background-color: {color}; border: 1px solid #888;")
+
     def _update_color_button(self, color):
-        self.color_button.setStyleSheet(f"background-color: {color};")
+        self.color_button.setStyleSheet(f"background-color: {color}; border: 1px solid #888;")
 
     def _choose_color(self):
         color_dialog = QColorDialog(QColor(self.parent.dock_color), self)
@@ -299,6 +354,20 @@ class SettingsDialog(QDialog):
             if color.isValid():
                 self.parent.dock_color = color.name()
                 self._update_color_button(color.name())
+
+    def _choose_border_color(self):
+        color_dialog = QColorDialog(QColor(self.parent.border_color), self)
+        color_dialog.setWindowFlags(
+            color_dialog.windowFlags() |
+            Qt.WindowType.WindowStaysOnTopHint
+        )
+        color_dialog.setCurrentColor(QColor(self.parent.border_color))
+        
+        if color_dialog.exec() == QColorDialog.DialogCode.Accepted:
+            color = color_dialog.currentColor()
+            if color.isValid():
+                self.parent.border_color = color.name()
+                self._update_border_color_button(color.name())
 
     def setup_buttons_tab(self):
         """Setup the buttons tab with CRUD operations"""
@@ -542,6 +611,8 @@ class SettingsDialog(QDialog):
             "icon_size": self.icon_size_slider.value(),
             "layout_spacing": self.spacing_slider.value(),
             "dock_offset": self.offset_slider.value(),
+            "border_width": self.border_width_slider.value() / 2.0, # Divide by scale
+            "border_color": self.parent.border_color,
         }
         self.settings_applied.emit(new_settings)
 
@@ -673,6 +744,8 @@ class DockWindow(QWidget):
         self.icon_size = settings.get('icon_size', 32) # Default to 32 if not set
         self.layout_spacing = settings.get('layout_spacing', 5)
         self.dock_offset = settings.get('dock_offset', 10)
+        self.border_width = settings.get('border_width', 1)
+        self.border_color = settings.get('border_color', "#FFFFFF")
 
     def get_default_settings(self):
         """Get default settings for first-time initialization.
@@ -692,6 +765,8 @@ class DockWindow(QWidget):
             "icon_size": 32,                 # Default icon size
             "layout_spacing": 5,             # Default space between icons
             "dock_offset": 10,               # Default distance from screen edge
+            "border_width": 1,               # Default border width
+            "border_color": "#FFFFFF",       # Default border color
         }
 
     def save_settings(self, settings):
@@ -852,6 +927,8 @@ class DockWindow(QWidget):
         self.icon_size = settings.get('icon_size', 32)
         self.layout_spacing = settings.get('layout_spacing', 5)
         self.dock_offset = settings.get('dock_offset', 10)
+        self.border_width = settings.get('border_width', 1)
+        self.border_color = settings.get('border_color', "#FFFFFF")
         
         self.save_settings(settings)
         
@@ -894,8 +971,20 @@ class DockWindow(QWidget):
         color = QColor(self.dock_color)
         color.setAlpha(int(255 * (1 - self.transparency / 100)))
         painter.setBrush(color)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(self.rect(), self.corner_radius, self.corner_radius)
+        painter.setPen(Qt.PenStyle.NoPen) # Default to no border
+
+        # Draw border only if width is greater than 0
+        if self.border_width > 0:
+            border_color = QColor(self.border_color)
+            border_color.setAlpha(color.alpha()) # Match border transparency to background
+            
+            # Adjust the rectangle to ensure the border is drawn inside the widget bounds
+            # Use int() to convert potential float to int for QRect.adjusted()
+            adjustment = int(self.border_width / 2)
+            painter.setPen(QPen(border_color, self.border_width))
+            painter.drawRoundedRect(self.rect().adjusted(adjustment, adjustment, -adjustment, -adjustment), self.corner_radius, self.corner_radius)
+        else:
+            painter.drawRoundedRect(self.rect(), self.corner_radius, self.corner_radius)
         painter.end()
 
     def resizeEvent(self, event):
