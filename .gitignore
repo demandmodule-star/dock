@@ -4,10 +4,6 @@ buttons.json
 
 # Icon files
 icons/
-*.png
-*.ico
-*.jpg
-*.jpeg
 
 # Python cache files
 __pycache__/

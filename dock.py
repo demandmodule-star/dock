@@ -779,9 +779,25 @@ class DockWindow(QWidget):
                 if action.startswith(('http://', 'https://', 'www.')):
                     # Open URLs in default browser
                     webbrowser.open(action)
+                elif os.path.exists(action) or os.path.exists(os.path.expandvars(action)):
+                    # Handle directory or file paths
+                    # Expand environment variables if present
+                    expanded_path = os.path.expandvars(action)
+                    if os.path.isdir(expanded_path):
+                        # For directories, use explorer.exe with /select flag
+                        subprocess.Popen(['explorer', expanded_path], shell=False)
+                    else:
+                        # For files, use the default associated program
+                        os.startfile(expanded_path)
                 else:
                     # Run other commands in a non-blocking way
-                    subprocess.Popen(action, shell=True)
+                    # Split the command and arguments to avoid shell=True security issues
+                    try:
+                        # First try to split and run without shell
+                        subprocess.Popen(action.split(), shell=False)
+                    except (FileNotFoundError, subprocess.SubprocessError):
+                        # Fallback to shell=True for complex commands
+                        subprocess.Popen(action, shell=True)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to execute action: {str(e)}")
 
@@ -919,7 +935,11 @@ class DockWindow(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    # Set application icon
+    app_icon = QIcon("app.ico")
+    app.setWindowIcon(app_icon)
     dock = DockWindow()
+    dock.setWindowIcon(app_icon)  # Set icon for the dock window
     dock.show()
     # Use single-shot timer to position after the window is shown and sized
     QTimer.singleShot(0, dock.place_dock)
