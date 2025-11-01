@@ -169,7 +169,7 @@ class SettingsDialog(QDialog):
         frame_layout.addSpacing(15)
 
         # Description
-        desc_text = "A customizable, auto-hiding dock widget built with PyQt6. It provides a sleek, modern, and highly configurable interface for your desktop."
+        desc_text = "A customizable, auto-hiding dock widget. It provides a sleek, modern, and highly configurable interface for your desktop."
         desc_label = QLabel(desc_text)
         desc_label.setWordWrap(True)
         desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -191,6 +191,19 @@ class SettingsDialog(QDialog):
         repo_label.setOpenExternalLinks(True)
         form_layout.addRow("<b>Repository:</b>", repo_label)
         frame_layout.addLayout(form_layout)
+
+        frame_layout.addStretch() # Pushes the quit button to the bottom
+
+        # Quit Button
+        quit_btn = QPushButton("Quit Application")
+        quit_btn.setFixedWidth(150)
+        # Use a lambda to call QApplication.quit directly
+        quit_btn.clicked.connect(lambda: QApplication.quit())
+        quit_btn_layout = QHBoxLayout()
+        quit_btn_layout.addStretch()
+        quit_btn_layout.addWidget(quit_btn)
+        quit_btn_layout.addStretch()
+        frame_layout.addLayout(quit_btn_layout)
 
         main_layout.addWidget(content_frame)
         self.tab_widget.addTab(info_tab, "Info")
@@ -644,12 +657,12 @@ class DockButton(QToolButton):
             
             # Handle icon
             icon_path = self.config.get('icon', '')
-            if icon_path and Path(icon_path).exists():
-                icon = QIcon(icon_path)
-                self.setIcon(icon)
-                self.setText('')  # Clear text when using icon
+            if (name == 'Settings' or (icon_path and Path(icon_path).exists())):  # An icon path is specified
+                self.setIcon(QIcon(icon_path))
             else:
-                self.setText('•')  # Fallback to dot if no icon
+                # Fallback to app icon if icon path is invalid
+                self.setIcon(QIcon("app.ico"))
+            self.setText('')
             
             self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             self.setCursor(Qt.CursorShape.PointingHandCursor)  # Set pointing hand cursor
