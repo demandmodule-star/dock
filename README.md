@@ -2,10 +2,17 @@
 
 A customizable, auto-hiding dock widget built with PyQt6. It provides a sleek, modern, and highly configurable interface for your desktop to launch your favorite applications and tools with style!
 
+## Downloads
+
+You can download the latest version of Dynamic Dock Widget for Windows from the releases page.
+
+[**➡️ Download Latest Release**](https://github.com/demandmodule-star/dock/releases/latest)
+
 ## Features
 
 - 🔄 Auto-hiding dock with smooth animations
 - 📍 Multiple dock positions (Left, Right, Top, Bottom)
+- 🔔 Automatic update notifications
 - ⚙️ **Advanced GUI-based Settings:**
   - Tabbed interface for easy navigation ("Customization", "Buttons", and "Info").
   - **Full Button Management:** Add, edit, delete, and reorder buttons directly from the settings dialog.
@@ -25,14 +32,23 @@ A customizable, auto-hiding dock widget built with PyQt6. It provides a sleek, m
 ## Requirements
 
 - Python 3.6+
-- PyQt6
+- PyQt6, packaging
 
-## Installation
+## Installation & Usage
+
+### For Users
+
+1. Go to the [Releases page](https://github.com/demandmodule-star/dock/releases/latest).
+2. Download the `DynamicDockWidget.zip` file from the latest release.
+3. Extract the ZIP file.
+4. Run `dock.exe`.
+
+### For Developers
 
 1. Ensure you have Python installed
 2. Install the required dependency:
 ```bash
-pip install PyQt6
+pip install PyQt6 packaging
 ```
 
 ## Usage

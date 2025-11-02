@@ -48,6 +48,8 @@ import sys
 import json
 import subprocess
 import webbrowser
+import urllib.request
+import urllib.error
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
@@ -57,12 +59,13 @@ from PyQt6.QtWidgets import (
     QHeaderView, QFileDialog, QLineEdit
 )
 from PyQt6.QtCore import Qt, QTimer, QRect, QPropertyAnimation, QEasingCurve, QSize
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, QThread
 from PyQt6.QtGui import QPainter, QColor, QIcon, QFont, QPen
+from packaging.version import parse as parse_version
 
 # Application version
-__version__ = "0.1.0"
-
+__version__ = "0.5.0"
+UPDATE_URL = "https://api.github.com/repos/demandmodule-star/dock/releases/latest"
 # Dock position constants
 EDGE_TOP = 'top'
 EDGE_BOTTOM = 'bottom'
@@ -74,6 +77,49 @@ SETTINGS_FILE = "settings.json"
 BUTTONS_FILE = "buttons.json"
 
 SHOW_TRIGGER_DISTANCE = 20  # Distance from edge to trigger show
+
+class UpdateCheckThread(QThread):
+    """Worker thread to check for updates without blocking the GUI."""
+    finished = pyqtSignal(dict)
+
+    def run(self):
+        """Fetch and compare version info from the remote server."""
+        result = {'update_available': False, 'latest_version': '', 'download_url': ''}
+        try:
+            # Use urllib to avoid adding new dependencies like requests
+            # The GitHub API requires a User-Agent header.
+            req = urllib.request.Request(UPDATE_URL, headers={'User-Agent': 'DynamicDockWidget-Update-Checker'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                if response.status == 200:
+                    data = json.loads(response.read().decode('utf-8'))
+                    # The version is in the 'tag_name', which might have a 'v' prefix.
+                    latest_version_str = data.get('tag_name', '').lstrip('v')
+                    # The download URL is the main release page.
+                    download_url = data.get('html_url')
+
+                    if latest_version_str:
+                        local_version = parse_version(__version__)
+                        latest_version = parse_version(latest_version_str)
+
+                        if latest_version > local_version:
+                            result['update_available'] = True
+                            result['latest_version'] = latest_version_str
+                            result['download_url'] = download_url
+                    else:
+                        print("Update check: 'tag_name' not found in API response.")
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                # This is expected if no releases are published yet.
+                print("Update check: No releases found (404). This is normal for a new project.")
+            else:
+                print(f"Update check failed with HTTP error: {e}")
+        except Exception as e:
+            # Silently fail on network errors, timeout, etc.
+            # The UI will just show that it's up-to-date.
+            print(f"Update check failed: {e}")
+        finally:
+            self.finished.emit(result)
+
 
 class SettingsDialog(QDialog):
     """Settings dialog for configuring dock appearance and behavior.
@@ -130,20 +176,34 @@ class SettingsDialog(QDialog):
 
     def _setup_info_tab(self):
         """Setup the info tab with application details."""
-        from PyQt6.QtWidgets import QFormLayout, QFrame
+        from PyQt6.QtWidgets import QFormLayout, QFrame, QScrollArea
 
         info_tab = QWidget()
-        main_layout = QVBoxLayout(info_tab)
+        tab_layout = QVBoxLayout(info_tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        # Create a scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        tab_layout.addWidget(scroll_area)
+
+        # Container for all content inside the scroll area
+        scroll_content_widget = QWidget()
+        scroll_area.setWidget(scroll_content_widget)
+
+        # Main layout for the scrollable content
+        main_layout = QVBoxLayout(scroll_content_widget)
         main_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.setContentsMargins(20, 20, 20, 20)
 
-        # Create a styled frame for the content
+        # Frame for the central content block
         content_frame = QFrame()
         content_frame.setObjectName("infoFrame")
-        content_frame.setFixedWidth(500)
-        # The frame is just a container, so no specific styling is needed.
+        content_frame.setFixedWidth(650)
         frame_layout = QVBoxLayout(content_frame)
-        frame_layout.setContentsMargins(25, 25, 25, 25)
+        frame_layout.setContentsMargins(0, 0, 0, 0)
         frame_layout.setSpacing(15)
         frame_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
@@ -165,6 +225,22 @@ class SettingsDialog(QDialog):
         version_label = QLabel(f"Version {__version__}")
         version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         frame_layout.addWidget(version_label)
+        
+        # Update status section
+        self.update_status_label = QLabel("Checking for updates...")
+        self.update_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.update_status_label.setStyleSheet("color: #888;")
+        frame_layout.addWidget(self.update_status_label)
+
+        self.download_button = QPushButton("Download Update")
+        self.download_button.setFixedWidth(150)
+        self.download_button.setVisible(False) # Initially hidden
+        self.download_button.clicked.connect(self.open_download_page)
+        download_layout = QHBoxLayout()
+        download_layout.addStretch()
+        download_layout.addWidget(self.download_button)
+        download_layout.addStretch()
+        frame_layout.addLayout(download_layout)
 
         frame_layout.addSpacing(15)
 
@@ -207,6 +283,31 @@ class SettingsDialog(QDialog):
 
         main_layout.addWidget(content_frame)
         self.tab_widget.addTab(info_tab, "Info")
+        
+        # Start update check when the dialog is opened
+        self.check_for_updates()
+
+    def check_for_updates(self):
+        """Initiates the background thread to check for updates."""
+        self.update_checker = UpdateCheckThread()
+        self.update_checker.finished.connect(self.on_update_check_finished)
+        self.update_checker.start()
+
+    def on_update_check_finished(self, result):
+        """Handles the result from the update check thread."""
+        if result.get('update_available'):
+            self.update_status_label.setText(f"Update available: <b>v{result['latest_version']}</b>")
+            self.update_status_label.setStyleSheet("color: #3daee9;") # A nice blue color
+            self.download_url = result['download_url']
+            self.download_button.setVisible(True)
+        else:
+            self.update_status_label.setText("You are up-to-date!")
+            self.update_status_label.setStyleSheet("color: #2ecc71;") # A nice green color
+
+    def open_download_page(self):
+        """Opens the download URL in the user's default web browser."""
+        if hasattr(self, 'download_url') and self.download_url:
+            webbrowser.open(self.download_url)
 
     def _setup_customization_tab(self):
         """Setup the customization tab with appearance settings"""
