@@ -39,7 +39,7 @@ You can download the latest version of Dynamic Dock Widget for Windows from the 
 ### For Users
 
 1. Go to the [Releases page](https://github.com/demandmodule-star/dock/releases/latest).
-2. Download the `DynamicDockWidget.zip` file from the latest release.
+2. Download the appropriate `.zip` file for your operating system from the "Assets" section.
 3. Extract the ZIP file.
 4. Run `dock.exe`.
 

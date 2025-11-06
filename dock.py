@@ -64,7 +64,7 @@ from PyQt6.QtGui import QPainter, QColor, QIcon, QFont, QPen
 from packaging.version import parse as parse_version
 
 # Application version
-__version__ = "0.5.0"
+__version__ = "0.0.0-placeholder"
 UPDATE_URL = "https://api.github.com/repos/demandmodule-star/dock/releases/latest"
 # Dock position constants
 EDGE_TOP = 'top'
